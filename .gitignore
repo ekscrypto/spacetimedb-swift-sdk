@@ -4,6 +4,22 @@
 
 ## User settings
 xcuserdata/
+# Xcode user-specific data
+*.xcuserstate
+*.xcscmblueprint
+
+# Exclude user data folders inside .xcodeproj and .xcworkspace
+**/*.xcuserdatad
+**/*.xcuserdata/
+
+# Derived data and other build outputs
+DerivedData/
+build/
+.build/
+.swiftpm/
+
+# Optional: macOS system files
+.DS_Store
 
 ## Obj-C/Swift specific
 *.hmap
