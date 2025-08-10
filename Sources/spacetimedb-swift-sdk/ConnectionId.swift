@@ -7,7 +7,7 @@
 
 import Foundation
 
-public struct ConnectionId: RawRepresentable, Codable, Equatable, Hashable {
+public struct ConnectionId: RawRepresentable, Codable, Equatable, Hashable, Sendable {
     public let rawValue: Data
 
     public init() {
