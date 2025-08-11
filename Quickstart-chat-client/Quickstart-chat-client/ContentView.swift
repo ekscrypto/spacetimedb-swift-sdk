@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State var chatClient = try! QuickstartChat()
+
     var body: some View {
         VStack {
             Image(systemName: "globe")
@@ -16,6 +18,9 @@ struct ContentView: View {
             Text("Hello, world!")
         }
         .padding()
+        .onAppear() {
+            Task { try await chatClient.connect() }
+        }
     }
 }
 

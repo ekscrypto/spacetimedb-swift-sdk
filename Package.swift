@@ -14,12 +14,18 @@ let package = Package(
         .library(
             name: "spacetimedb-swift-sdk",
             targets: ["spacetimedb-swift-sdk"]),
+        .library(
+            name: "BSATN",
+            targets: ["BSATN"]),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
-            name: "spacetimedb-swift-sdk"),
+            name: "BSATN"),
+        .target(
+            name: "spacetimedb-swift-sdk",
+            dependencies: ["BSATN"]),
         .testTarget(
             name: "spacetimedb-swift-sdkTests",
             dependencies: ["spacetimedb-swift-sdk"]

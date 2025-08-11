@@ -8,12 +8,14 @@
 import Foundation
 import spacetimedb_swift_sdk
 
-actor QuickstartChat {
-
+actor QuickstartChat: SpacetimeDBClientDelegate {
     private let spacetimeClient: SpacetimeDBClient!
+    private var identity: Identity?
+    private var token: AuthenticationToken?
+    private var connected: Bool = false
 
     init(
-        host: String = "http://localhost:3000",
+        host: String = "ws://localhost:3000",
         db: String = "quickstart-chat"
     ) throws {
         spacetimeClient = try SpacetimeDBClient(
@@ -22,18 +24,35 @@ actor QuickstartChat {
         )
     }
 
+    func retrieveNewIdentity() async throws {
+        let (identity, token) = try await spacetimeClient.identity()
+        self.identity = identity
+        self.token = token
+    }
+
     func connect() async throws {
         try await spacetimeClient.connect(
-            onError: { [weak self] error in await self?.onError(error) },
-            onConnect: { [weak self] connectionId in await self?.onConnect(connectionId) }
+            token: token,
+            delegate: self
         )
     }
 
-    func onConnect(_ connectionId: ConnectionId) {
-        print("Connected using \(connectionId)")
+    func onConnect() {
+        print("Connected!")
+        connected = true
+    }
+
+    func onDisconnect() async {
+        print("Disconnected")
     }
 
     func onError(_ error: any Error) {
         print("Error: \(error)")
+        connected = false
+    }
+
+    func onIncomingMessage(_ data: Data) {
+        guard let message = String(data: data, encoding: .utf8) else { return }
+        print("Received message: \(message)")
     }
 }
