@@ -17,6 +17,9 @@ let package = Package(
         .library(
             name: "BSATN",
             targets: ["BSATN"]),
+        .executable(
+            name: "quickstart-chat",
+            targets: ["quickstart-chat"]),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -26,6 +29,9 @@ let package = Package(
         .target(
             name: "spacetimedb-swift-sdk",
             dependencies: ["BSATN"]),
+        .executableTarget(
+            name: "quickstart-chat",
+            dependencies: ["spacetimedb-swift-sdk", "BSATN"]),
         .testTarget(
             name: "spacetimedb-swift-sdkTests",
             dependencies: ["spacetimedb-swift-sdk"]

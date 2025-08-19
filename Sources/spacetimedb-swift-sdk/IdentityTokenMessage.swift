@@ -8,39 +8,30 @@
 import Foundation
 import BSATN
 
-struct IdentityTokenMessage: Codable {
-    let identityToken: IdentityTokenPayload
+struct IdentityTokenMessage {
+    let identity: UInt256
+    let token: String
+    let connectionId: BSATN.UInt128
 
-    enum CodingKeys: String, CodingKey {
-        case identityToken = "IdentityToken"
+    struct Model: ProductModel {
+        var definition: [AlgebraicValueType] { [
+            .uint256, // identity
+            .string, // token
+            .uint128 // connection_id
+        ]}
     }
 
-    struct IdentityTokenPayload: Codable {
-        let identity: EmbeddedIdentity
-        let token: String
-        // Re-enabling connectionId now that we have proper BSATN support
-        let connectionId: EmbeddedConnectionId
-
-        enum CodingKeys: String, CodingKey {
-            case identity
-            case token
-            case connectionId = "connection_id"
+    init(modelValues: [AlgebraicValue]) throws {
+        let model = Model()
+        guard modelValues.count == model.definition.count,
+              case .uint256(let identity) = modelValues[0],
+              case .string(let token) = modelValues[1],
+              case .uint128(let connectionId) = modelValues[2]
+        else {
+            throw SpacetimeDBErrors.invalidDefinition(model)
         }
-
-        struct EmbeddedIdentity: Codable {
-            enum CodingKeys: String, CodingKey {
-                case identity = "__identity__"
-            }
-
-            let identity: String
-        }
-
-        struct EmbeddedConnectionId: Codable {
-            enum CodingKeys: String, CodingKey {
-                case connectionId = "__connection_id__"
-            }
-
-            let connectionId: UInt128
-        }
+        self.identity = identity
+        self.token = token
+        self.connectionId = connectionId
     }
 }

@@ -40,21 +40,19 @@ extension SpacetimeDBClient {
         }
         
         // Process the BSATN message
-        let result = BSATNMessageHandler.processMessage(data)
-        switch result {
-        case .success(let decodedValues):
-            if DEBUG_HEX_VIEW {
-                print("Decoded values:")
-                for value in decodedValues {
-                    print("  \(value)")
-                }
+        let messageHandler = BSATNMessageHandler(supportedTags: [
+            Tags.identityToken.rawValue: IdentityTokenMessage.Model()
+        ])
+        do {
+            let message = try messageHandler.processMessage(data)
+            if message.tag == Tags.identityToken.rawValue {
+                let identityToken = try IdentityTokenMessage(modelValues: message.values)
+                print(">>> Identity: \(identityToken)")
             }
-        case .failure(let error):
-            if DEBUG_HEX_VIEW {
-                print("Failed to decode BSATN message: \(error)")
-            }
+        } catch {
+            print(">>> Failed to decode: \(error)")
         }
-        
+
         let onIncomingMessage = clientDelegate?.onIncomingMessage
         await onIncomingMessage?(data)
     }

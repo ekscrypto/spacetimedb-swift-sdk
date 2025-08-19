@@ -18,6 +18,12 @@ public actor SpacetimeDBClient {
         case badServerResponse
     }
 
+    public enum Compression: String {
+        case none = "None"
+        case brotli = "Brotli"
+        case gzip = "Gzip"
+    }
+
     /// Returns a non-connected instance of the SpacetimeDBClient
     ///
     /// Parameters:
@@ -28,10 +34,12 @@ public actor SpacetimeDBClient {
     public init(
         host: String,
         db dbName: String,
-        urlSession: URLSession? = nil
+        urlSession: URLSession? = nil,
+        compression: Compression = .none
     ) throws {
         self.host = host
         self.dbName = dbName
+        self.compression = compression
         if let urlSession {
             guard let delegate = urlSession.delegate as? WebsocketDelegate else {
                 throw Errors.incompatibleUrlSessionDelegate
@@ -47,6 +55,7 @@ public actor SpacetimeDBClient {
     internal var webSocketTask: URLSessionWebSocketTask?
     internal var socketDelegate: WebsocketDelegate?
     internal let urlSession: URLSession
+    internal let compression: Compression
     public let host: String
     public let dbName: String
     internal var receiveTask: Task<Void, Error>?

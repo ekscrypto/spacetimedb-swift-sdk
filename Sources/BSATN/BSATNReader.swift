@@ -2,144 +2,86 @@ import Foundation
 
 /// Utility class for reading BSATN-encoded data
 public class BSATNReader {
-    private let data: Data
+    private let bytes: ContiguousArray<UInt8>
     private var offset: Int = 0
     
     public init(data: Data) {
-        self.data = data
+        bytes = ContiguousArray(data)
     }
     
     /// Read a specified number of bytes
-    public func readBytes(_ count: Int) throws -> Data {
-        guard offset + count <= data.count else {
+    public func readBytes(_ count: Int) throws -> ArraySlice<UInt8> {
+        print(">> \(#function), offset: \(offset), count: \(count), total: \(bytes.count)")
+        guard offset + count <= bytes.count else {
             throw BSATNError.insufficientData
         }
-        
-        let result = data.subdata(in: offset..<(offset + count))
-        offset += count
-        return result
+
+        defer {
+            offset += count
+        }
+        return bytes[offset..<(offset + count)]
     }
-    
-    /// Read a UInt8 value
-    public func readUInt8() throws -> UInt8 {
-        let bytes = try readBytes(1)
-        return bytes[0]
+
+    func read<T: Packed>() throws -> T {
+        print(">> \(#function).\(#line) \(T.self)")
+        let slice = try readBytes(MemoryLayout<T>.size)
+        let value: T = try slice.unpacked()
+        print(">> \(#function).\(#line) \(T.self) -> \(value)")
+        return value
     }
-    
-    /// Read a UInt16 value (little-endian)
-    public func readUInt16() throws -> UInt16 {
-        let bytes = try readBytes(2)
-        return bytes.withUnsafeBytes { $0.load(as: UInt16.self).littleEndian }
-    }
-    
-    /// Read a UInt32 value (little-endian)
-    public func readUInt32() throws -> UInt32 {
-        let bytes = try readBytes(4)
-        return bytes.withUnsafeBytes { $0.load(as: UInt32.self).littleEndian }
-    }
-    
-    /// Read a UInt64 value (little-endian)
-    public func readUInt64() throws -> UInt64 {
-        let bytes = try readBytes(8)
-        return bytes.withUnsafeBytes { $0.load(as: UInt64.self).littleEndian }
-    }
-    
-    /// Read a UInt128 value (little-endian)
-    public func readUInt128() throws -> UInt128 {
-        let bytes = try readBytes(16)
-        return try UInt128.fromBSATN(bytes)
-    }
-    
-    /// Read an Int8 value
-    public func readInt8() throws -> Int8 {
-        let bytes = try readBytes(1)
-        return Int8(bitPattern: bytes[0])
-    }
-    
-    /// Read an Int16 value (little-endian)
-    public func readInt16() throws -> Int16 {
-        let bytes = try readBytes(2)
-        let uintValue = bytes.withUnsafeBytes { $0.load(as: UInt16.self) }
-        return Int16(bitPattern: uintValue.littleEndian)
-    }
-    
-    /// Read an Int32 value (little-endian)
-    public func readInt32() throws -> Int32 {
-        let bytes = try readBytes(4)
-        let uintValue = bytes.withUnsafeBytes { $0.load(as: UInt32.self) }
-        return Int32(bitPattern: uintValue.littleEndian)
-    }
-    
-    /// Read an Int64 value (little-endian)
-    public func readInt64() throws -> Int64 {
-        let bytes = try readBytes(8)
-        let uintValue = bytes.withUnsafeBytes { $0.load(as: UInt64.self) }
-        return Int64(bitPattern: uintValue.littleEndian)
-    }
-    
-    /// Read a Float32 value (little-endian)
-    public func readFloat32() throws -> Float {
-        let bytes = try readBytes(4)
-        let bitPattern = bytes.withUnsafeBytes { $0.load(as: UInt32.self).littleEndian }
-        return Float(bitPattern: bitPattern)
-    }
-    
-    /// Read a Float64 value (little-endian)
-    public func readFloat64() throws -> Double {
-        let bytes = try readBytes(8)
-        let bitPattern = bytes.withUnsafeBytes { $0.load(as: UInt64.self).littleEndian }
-        return Double(bitPattern: bitPattern)
-    }
-    
+
     /// Read a boolean value
     public func readBool() throws -> Bool {
-        let byte = try readUInt8()
-        switch byte {
-        case 0: return false
-        case 1: return true
-        default:
-            throw DecodingError.dataCorrupted(
-                DecodingError.Context(codingPath: [], 
-                                    debugDescription: "Invalid boolean value: \(byte)")
-            )
-        }
+        let byte: UInt8 = try read()
+        return byte != 0
     }
     
     /// Read a string prefixed with a UInt32 length
     public func readString() throws -> String {
-        let length = try readUInt32()
+        print(">> \(#function).\(#line)")
+        let length: UInt32 = try read()
+        print(">> \(#function).\(#line)")
         let stringData = try readBytes(Int(length))
-        guard let string = String(data: stringData, encoding: .utf8) else {
+        print(">> \(#function).\(#line)")
+        guard let string = String(data: Data(stringData), encoding: .utf8) else {
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(codingPath: [], 
                                     debugDescription: "Invalid UTF-8 data for string")
             )
         }
+        print(">> \(#function).\(#line) -> \(string)")
         return string
     }
     
     /// Read an array with UInt32 count prefix
     public func readArray(elementReader: () throws -> AlgebraicValue) throws -> [AlgebraicValue] {
-        let count = try readUInt32()
+        print(">> \(#function).\(#line)")
+        let count: UInt32 = try read()
         var elements: [AlgebraicValue] = []
         for _ in 0..<count {
+            print(">> \(#function).\(#line)")
             elements.append(try elementReader())
         }
+        print(">> \(#function).\(#line)")
         return elements
     }
     
     /// Read a product value (concatenated field values)
-    public func readProduct(fieldReaders: [() throws -> AlgebraicValue]) throws -> [AlgebraicValue] {
-        var fields: [AlgebraicValue] = []
-        for reader in fieldReaders {
-            fields.append(try reader())
+    public func readProduct(definition valueTypes: [AlgebraicValueType]) throws -> [AlgebraicValue] {
+        print(">> \(#function).\(#line) \(valueTypes)")
+        var values: [AlgebraicValue] = []
+        for valueType in valueTypes {
+            print(">> \(#function).\(#line)")
+            let value = try readAlgebraicValue(as: valueType)
+            values.append(value)
         }
-        return fields
+        print(">> \(#function).\(#line)")
+        return values
     }
     
     /// Read a sum value (tag + variant data)
     public func readSum(variantReaders: [UInt8: () throws -> AlgebraicValue?]) throws -> (tag: UInt8, value: AlgebraicValue?) {
-        let tag = try readUInt8()
+        let tag: UInt8 = try read()
         let value = try variantReaders[tag]?()
         return (tag: tag, value: value)
     }
@@ -148,29 +90,35 @@ public class BSATNReader {
     public func readAlgebraicValue(as type: AlgebraicValueType) throws -> AlgebraicValue {
         switch type {
         case .bool:
-            return .bool(try readBool())
+            return .bool(try read())
         case .uint8:
-            return .uint8(try readUInt8())
+            return .uint8(try read())
         case .uint16:
-            return .uint16(try readUInt16())
+            return .uint16(try read())
         case .uint32:
-            return .uint32(try readUInt32())
+            return .uint32(try read())
         case .uint64:
-            return .uint64(try readUInt64())
+            return .uint64(try read())
         case .uint128:
-            return .uint128(try readUInt128())
+            return .uint128(try read())
+        case .uint256:
+            return .uint256(try read())
         case .int8:
-            return .int8(try readInt8())
+            return .int8(try read())
         case .int16:
-            return .int16(try readInt16())
+            return .int16(try read())
         case .int32:
-            return .int32(try readInt32())
+            return .int32(try read())
         case .int64:
-            return .int64(try readInt64())
+            return .int64(try read())
+        case .int128:
+            return .int128(try read())
+        case .int256:
+            return .int256(try read())
         case .float32:
-            return .float32(try readFloat32())
+            return .float32(try read())
         case .float64:
-            return .float64(try readFloat64())
+            return .float64(try read())
         case .string:
             return .string(try readString())
         // For complex types, you would need to provide specific readers
@@ -184,7 +132,7 @@ public class BSATNReader {
     
     /// Check if there's more data to read
     public var hasMoreData: Bool {
-        return offset < data.count
+        return offset < bytes.count
     }
     
     /// Current reading position
@@ -194,27 +142,29 @@ public class BSATNReader {
     
     /// Remaining bytes
     public var remainingBytes: Int {
-        return data.count - offset
+        return bytes.count - offset
     }
 }
 
 /// Enum representing AlgebraicValue types for reading
-public enum AlgebraicValueType {
+public enum AlgebraicValueType: Sendable {
     case bool
     case uint8
     case uint16
     case uint32
     case uint64
     case uint128
+    case uint256
     case int8
     case int16
     case int32
     case int64
     case int128
+    case int256
     case float32
     case float64
     case string
-    case array
-    case product
+    case array(ArrayModel)
+    case product(ProductModel)
     case sum
 }
