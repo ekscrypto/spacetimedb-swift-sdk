@@ -64,14 +64,25 @@ public actor SpacetimeDBClient {
     public var connected: Bool { _connected }
     internal var _connected: Bool = false
 
-    internal var nextRequestId: UInt64 {
+    internal var nextRequestId: UInt32 {
         _nextRequestId += 1
         return _nextRequestId
     }
-    private var _nextRequestId: UInt64 = 0
+    private var _nextRequestId: UInt32 = 0
 
     internal var uniqueSocketKey: String {
         let activeSocketKeyBytes = (0..<16).map { _ in UInt8.random(in: 0...255) }
         return Data(activeSocketKeyBytes).base64EncodedString()
+    }
+    
+    // Table Row Decoders
+    private var tableRowDecoders: [String: TableRowDecoder] = [:]
+    
+    public func registerTableRowDecoder(table: String, decoder: TableRowDecoder) {
+        tableRowDecoders[table] = decoder
+    }
+    
+    internal func decoder(forTable name: String) -> TableRowDecoder? {
+        return tableRowDecoders[name]
     }
 }

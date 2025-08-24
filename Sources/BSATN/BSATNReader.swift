@@ -11,7 +11,7 @@ public class BSATNReader {
     
     /// Read a specified number of bytes
     public func readBytes(_ count: Int) throws -> ArraySlice<UInt8> {
-        print(">> \(#function), offset: \(offset), count: \(count), total: \(bytes.count)")
+        print(String(format: ">> %@, offset: 0x%04X, count: %d, total: %d (0x%X)", "\(#function)", offset, count, bytes.count, bytes.count))
         guard offset + count <= bytes.count else {
             throw BSATNError.insufficientData
         }
@@ -22,7 +22,7 @@ public class BSATNReader {
         return bytes[offset..<(offset + count)]
     }
 
-    func read<T: Packed>() throws -> T {
+    public func read<T: Packed>() throws -> T {
         print(">> \(#function).\(#line) \(T.self)")
         let slice = try readBytes(MemoryLayout<T>.size)
         let value: T = try slice.unpacked()
@@ -85,9 +85,10 @@ public class BSATNReader {
         let value = try variantReaders[tag]?()
         return (tag: tag, value: value)
     }
-    
+
     /// Read any AlgebraicValue - you would specify the type expected
     public func readAlgebraicValue(as type: AlgebraicValueType) throws -> AlgebraicValue {
+        print(">>> \(#line) \(type)")
         switch type {
         case .bool:
             return .bool(try read())
@@ -122,11 +123,31 @@ public class BSATNReader {
         case .string:
             return .string(try readString())
         // For complex types, you would need to provide specific readers
-        default:
-            throw DecodingError.dataCorrupted(
-                DecodingError.Context(codingPath: [], 
-                                    debugDescription: "Unsupported AlgebraicValue type: \(type)")
-            )
+        case .array(let arrayModel):
+            let baseType = arrayModel.definition
+            let count: UInt32 = try read()
+            print("Attempting to decode \(count) \(arrayModel)")
+            var values: [AlgebraicValue] = []
+            for _ in 0..<count {
+                print(">>> \(#line)")
+                values.append(try readAlgebraicValue(as: baseType))
+            }
+            return .array(values)
+        case .product(let model):
+            var values: [AlgebraicValue] = []
+            for field in model.definition {
+                values.append(try readAlgebraicValue(as: field))
+            }
+            return .product(values)
+        case .sum:
+            // Read the tag byte
+            let tag: UInt8 = try read()
+            // For sum types, we don't know the variant structure without more context
+            // Common case: Optional type (tag 0 = Some with data, tag 1 = None without data)
+            // We'll capture all remaining data for the caller to interpret
+            // This is a temporary solution - ideally we'd pass variant definitions
+            let remainingData = Data(bytes[offset..<bytes.count])
+            return .sum(tag: tag, value: remainingData)
         }
     }
     
@@ -143,6 +164,21 @@ public class BSATNReader {
     /// Remaining bytes
     public var remainingBytes: Int {
         return bytes.count - offset
+    }
+    
+    /// Read an optional value (sum type with tag 0=Some, 1=None)
+    public func readOptional<T>(readValue: () throws -> T) throws -> T? {
+        let tag: UInt8 = try read()
+        switch tag {
+        case 0:
+            // Some case - read the value
+            return try readValue()
+        case 1:
+            // None case
+            return nil
+        default:
+            throw BSATNError.unsupportedTag(tag)
+        }
     }
 }
 

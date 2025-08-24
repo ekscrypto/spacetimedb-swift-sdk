@@ -31,7 +31,10 @@ let package = Package(
             dependencies: ["BSATN"]),
         .executableTarget(
             name: "quickstart-chat",
-            dependencies: ["spacetimedb-swift-sdk", "BSATN"]),
+            dependencies: ["spacetimedb-swift-sdk", "BSATN"],
+            swiftSettings: [
+                .unsafeFlags(["-parse-as-library"])
+            ]),
         .testTarget(
             name: "spacetimedb-swift-sdkTests",
             dependencies: ["spacetimedb-swift-sdk"]

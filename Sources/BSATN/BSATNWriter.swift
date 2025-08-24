@@ -12,6 +12,12 @@ public class BSATNWriter {
         data.append(bytes)
     }
 
+    public func finalize() -> Data {
+        let finalizedData = data
+        data.removeAll()
+        return finalizedData
+    }
+
     internal func write(_ value: Packed) {
         value.appended(to: &data)
     }

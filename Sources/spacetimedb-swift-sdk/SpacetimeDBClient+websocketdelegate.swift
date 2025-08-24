@@ -11,7 +11,7 @@ extension SpacetimeDBClient {
     // MARK: - Delegate callbacks
     internal func websocketConnected() async {
         _connected = true
-        await clientDelegate?.onConnect()
+        await clientDelegate?.onConnect(client: self)
     }
 
     internal func websocketDisconnected() async {
@@ -24,6 +24,6 @@ extension SpacetimeDBClient {
         let clientDelegate = self.clientDelegate
         self.clientDelegate = nil
 
-        await clientDelegate?.onDisconnect()
+        await clientDelegate?.onDisconnect(client: self)
     }
 }

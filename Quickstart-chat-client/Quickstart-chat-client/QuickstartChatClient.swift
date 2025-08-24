@@ -1,58 +1,115 @@
-//
-//  QuickstartChatClient.swift
-//  Quickstart-chat-client
-//
-//  Created by Dave Poirier on 2025-08-09.
-//
-
-import Foundation
+import SwiftUI
 import spacetimedb_swift_sdk
+import BSATN
 
-actor QuickstartChat: SpacetimeDBClientDelegate {
-    private let spacetimeClient: SpacetimeDBClient!
-    private var identity: Identity?
-    private var token: AuthenticationToken?
-    private var connected: Bool = false
-
-    init(
-        host: String = "ws://localhost:3000",
-        db: String = "quickstart-chat"
-    ) throws {
-        spacetimeClient = try SpacetimeDBClient(
-            host: host,
-            db: db
-        )
+@main
+struct QuickstartChatClientApp: App {
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
     }
+}
 
-    func retrieveNewIdentity() async throws {
-        let (identity, token) = try await spacetimeClient.identity()
-        self.identity = identity
-        self.token = token
+struct ContentView: View {
+    @State private var isConnected = false
+    @State private var connectionStatus = "Disconnected"
+    @State private var messages: [String] = []
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("SpacetimeDB Quickstart Chat Client")
+                .font(.largeTitle)
+                .padding()
+            
+            Text("Status: \(connectionStatus)")
+                .foregroundColor(isConnected ? .green : .red)
+            
+            Button(isConnected ? "Disconnect" : "Connect") {
+                Task {
+                    if isConnected {
+                        // Handle disconnect
+                        connectionStatus = "Disconnected"
+                        isConnected = false
+                    } else {
+                        await connectToSpacetimeDB()
+                    }
+                }
+            }
+            .padding()
+            
+            ScrollView {
+                LazyVStack(alignment: .leading) {
+                    ForEach(messages, id: \.self) { message in
+                        Text(message)
+                            .padding(.horizontal)
+                    }
+                }
+            }
+            .border(Color.gray)
+            .padding()
+        }
+        .padding()
+        .frame(minWidth: 600, minHeight: 400)
     }
-
-    func connect() async throws {
-        try await spacetimeClient.connect(
-            token: token,
-            delegate: self
-        )
+    
+    private func connectToSpacetimeDB() async {
+        let delegate = ChatClientDelegate { [self] message in
+            DispatchQueue.main.async {
+                self.messages.append(message)
+            }
+        }
+        
+        do {
+            connectionStatus = "Connecting..."
+            
+            let client = try SpacetimeDBClient(
+                host: "http://localhost:3000",
+                db: "quickstart-chat"
+            )
+            
+            try await client.connect(delegate: delegate)
+            
+            DispatchQueue.main.async {
+                self.connectionStatus = "Connected"
+                self.isConnected = true
+            }
+            
+        } catch {
+            DispatchQueue.main.async {
+                self.connectionStatus = "Connection failed: \(error.localizedDescription)"
+                self.isConnected = false
+            }
+        }
     }
+}
 
-    func onConnect() {
-        print("Connected!")
-        connected = true
+final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
+    private let onMessage: (String) -> Void
+    
+    init(onMessage: @escaping (String) -> Void) {
+        self.onMessage = onMessage
     }
-
+    
+    func onConnect() async {
+        onMessage("✅ Connected to SpacetimeDB!")
+    }
+    
+    func onError(_ error: any Error) async {
+        onMessage("❌ Error: \(error)")
+    }
+    
     func onDisconnect() async {
-        print("Disconnected")
+        onMessage("🔌 Disconnected from SpacetimeDB")
     }
-
-    func onError(_ error: any Error) {
-        print("Error: \(error)")
-        connected = false
-    }
-
-    func onIncomingMessage(_ data: Data) {
-        guard let message = String(data: data, encoding: .utf8) else { return }
-        print("Received message: \(message)")
+    
+    func onIncomingMessage(_ message: Data) async {
+        let messageText = "📨 Received message (\(message.count) bytes)"
+        onMessage(messageText)
+        
+        if message.count > 0 {
+            let preview = message.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " ")
+            onMessage("   Preview: \(preview)...")
+        }
     }
 }

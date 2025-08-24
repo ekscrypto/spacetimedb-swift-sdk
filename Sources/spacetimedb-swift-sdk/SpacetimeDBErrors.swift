@@ -9,4 +9,5 @@ import BSATN
 
 public enum SpacetimeDBErrors: Error {
     case invalidDefinition(ProductModel)
+    case notConnected
 }

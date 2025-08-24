@@ -1,4 +1,4 @@
-public struct UInt256: Equatable, Hashable, CustomStringConvertible {
+public struct UInt256: Equatable, Hashable, CustomStringConvertible, Sendable {
     public let u0: UInt64
     public let u1: UInt64
     public let u2: UInt64

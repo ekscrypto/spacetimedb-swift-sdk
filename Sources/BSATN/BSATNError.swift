@@ -9,4 +9,5 @@ public enum BSATNError: Error {
     case insufficientData
     case notImplemented
     case unsupportedTag(UInt8)
+    case invalidStructure(String)
 }

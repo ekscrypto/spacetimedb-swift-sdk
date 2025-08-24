@@ -10,13 +10,6 @@ public final class BSATNMessageHandler {
 
     /// Process a BSATN message and attempt to decode it
     public func processMessage(_ data: Data) throws -> DecodedMessage {
-        // Display hex representation for debugging
-        if Self.DEBUG_HEX_VIEW {
-            print("=== BSATN Message Processing ===")
-            Self.printHexData(data)
-            print("===============================")
-        }
-
         let reader = BSATNReader(data: data)
         guard let compression = Compression(rawValue: try reader.read()),
               compression == .uncompressed

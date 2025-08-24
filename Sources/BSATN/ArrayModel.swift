@@ -6,5 +6,5 @@
 //
 
 public protocol ArrayModel: Sendable {
-    static var baseType: AlgebraicValueType { get }
+    var definition: AlgebraicValueType { get }
 }
