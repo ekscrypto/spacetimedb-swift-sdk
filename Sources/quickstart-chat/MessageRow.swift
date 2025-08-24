@@ -12,14 +12,14 @@ import spacetimedb_swift_sdk
 /// Represents a message row from the message table
 struct MessageRow {
     let sender: UInt256 // UInt256 identity
-    let text: String
-    let sentAt: UInt64 // timestamp
+    let sent: UInt64    // timestamp
+    let text: String    // message text
     
     struct Model: ProductModel {
         var definition: [AlgebraicValueType] { [
             .uint256, // sender identity
-            .string,  // message text
-            .uint64   // timestamp
+            .uint64,  // timestamp (sent)
+            .string   // message text
         ]}
     }
     
@@ -27,15 +27,15 @@ struct MessageRow {
         let model = Model()
         guard modelValues.count == model.definition.count,
               case .uint256(let sender) = modelValues[0],
-              case .string(let text) = modelValues[1],
-              case .uint64(let sentAt) = modelValues[2]
+              case .uint64(let sent) = modelValues[1],
+              case .string(let text) = modelValues[2]
         else {
             throw BSATNError.invalidStructure("Invalid MessageRow structure")
         }
         
         self.sender = sender
+        self.sent = sent
         self.text = text
-        self.sentAt = sentAt
     }
 }
 

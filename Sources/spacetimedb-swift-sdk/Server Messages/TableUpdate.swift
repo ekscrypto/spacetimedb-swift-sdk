@@ -134,7 +134,7 @@ struct TableUpdate {
                                 continue
                             }
                             
-                            let rowData = dataBlob[startOffset..<endOffset]
+                            let rowData = Data(dataBlob[startOffset..<endOffset])
                             deleteRows.append(rowData)
                         }
                     }
@@ -181,7 +181,7 @@ struct TableUpdate {
                                 continue
                             }
                             
-                            let rowData = dataBlob[startOffset..<endOffset]
+                            let rowData = Data(dataBlob[startOffset..<endOffset])
                             insertRows.append(rowData)
                             
                             if i < 5 {  // Show first few rows

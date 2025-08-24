@@ -121,11 +121,11 @@ actor LocalDatabase {
     func addMessage(_ message: MessageRow) {
         messages.append(message)
         // Keep messages sorted by timestamp
-        messages.sort { $0.sentAt < $1.sentAt }
+        messages.sort { $0.sent < $1.sent }
     }
     
     func removeMessage(_ message: MessageRow) {
-        messages.removeAll { $0.sender == message.sender && $0.sentAt == message.sentAt && $0.text == message.text }
+        messages.removeAll { $0.sender == message.sender && $0.sent == message.sent && $0.text == message.text }
     }
     
     func getUserCount() -> Int {
@@ -164,7 +164,7 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
     
     func onConnect(client: SpacetimeDBClient) async {
         print("✅ Connected to SpacetimeDB!")
-        _ = try? await client.subscribeMulti(queries: ["SELECT * FROM user"], queryId: 1)
+        _ = try? await client.subscribeMulti(queries: ["SELECT * FROM user", "SELECT * FROM message"], queryId: 1)
     }
     
     func onError(client: SpacetimeDBClient, error: any Error) async {
@@ -208,7 +208,7 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
             for row in rows {
                 if let message = row as? MessageRow {
                     await database.addMessage(message)
-                    print("   💬 Added message: \"\(message.text)\" at \(message.sentAt)")
+                    print("   💬 Added message: \"\(message.text)\" at \(message.sent)")
                 }
             }
         default:

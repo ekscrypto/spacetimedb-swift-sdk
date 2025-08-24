@@ -140,14 +140,28 @@ public class BSATNReader {
             }
             return .product(values)
         case .sum:
-            // Read the tag byte
+            // Read the tag byte  
             let tag: UInt8 = try read()
-            // For sum types, we don't know the variant structure without more context
-            // Common case: Optional type (tag 0 = Some with data, tag 1 = None without data)
-            // We'll capture all remaining data for the caller to interpret
-            // This is a temporary solution - ideally we'd pass variant definitions
-            let remainingData = Data(bytes[offset..<bytes.count])
-            return .sum(tag: tag, value: remainingData)
+            // For sum types, we don't know the variant structure without context
+            // Return empty data - the caller must handle sum types properly
+            return .sum(tag: tag, value: Data())
+        case .option(let innerType):
+            // Read the tag byte for the option
+            let tag: UInt8 = try read()
+            switch tag {
+            case 0:
+                // Some case - read the inner value and encode it
+                let innerValue = try readAlgebraicValue(as: innerType)
+                // We need to encode the inner value as data for the sum variant
+                let writer = BSATNWriter()
+                try writer.writeAlgebraicValue(innerValue)
+                return .sum(tag: tag, value: writer.finalize())
+            case 1:
+                // None case - no data
+                return .sum(tag: tag, value: Data())
+            default:
+                throw BSATNError.unsupportedTag(tag)
+            }
         }
     }
     
@@ -203,4 +217,5 @@ public enum AlgebraicValueType: Sendable {
     case array(ArrayModel)
     case product(ProductModel)
     case sum
+    indirect case option(AlgebraicValueType) // Optional type: tag 0=Some(T), tag 1=None
 }

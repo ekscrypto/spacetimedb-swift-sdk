@@ -18,7 +18,7 @@ struct UserRow {
     struct Model: ProductModel {
         var definition: [AlgebraicValueType] { [
             .uint256,   // identity
-            .sum,       // name (optional - sum type with tag 0=None, 1=Some)
+            .option(.string),  // name (optional string)
             .bool       // online status
         ]}
     }
