@@ -27,11 +27,11 @@ public enum UpdateStatus {
     
     init(reader: BSATNReader) throws {
         let tag: UInt8 = try reader.read()
-        print(">>>   UpdateStatus tag: \(tag)")
+        debugLog(">>>   UpdateStatus tag: \(tag)")
         switch tag {
         case 0:
             // Committed includes a DatabaseUpdate
-            print(">>>   Status is committed, reading DatabaseUpdate...")
+            debugLog(">>>   Status is committed, reading DatabaseUpdate...")
             let dbUpdate = try DatabaseUpdate(reader: reader)
             self = .committed(dbUpdate)
         case 1:

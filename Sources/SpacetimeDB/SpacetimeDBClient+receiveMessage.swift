@@ -33,25 +33,25 @@ extension SpacetimeDBClient {
 
     private func processOrForwardMessage(_ data: Data) async {
         // Display hex representation of the data before processing
-        if DEBUG_HEX_VIEW {
+        if debugEnabled {
             print("=== Received BSATN Message ===")
             printHexData(data)
             print("==============================")
         }
         
         // Process the BSATN message
-        let reader = BSATNReader(data: data)
+        let reader = BSATNReader(data: data, debugEnabled: debugEnabled)
         
         // Read compression tag (should be 0 for none)
         let compressionTag: UInt8 = (try? reader.read()) ?? 0
         if compressionTag != Tags.Compression.none.rawValue {
-            print(">>> Warning: Compressed messages not yet supported (compression: \(compressionTag))")
+            debugLog(">>> Warning: Compressed messages not yet supported (compression: \(compressionTag))")
             return
         }
         
         // Read message type tag
         let messageTag: UInt8 = (try? reader.read()) ?? 0
-        print(">>> Message type: \(messageTag)")
+        debugLog(">>> Message type: \(messageTag)")
         
         do {
             if messageTag == Tags.ServerMessage.identityToken.rawValue {
@@ -61,7 +61,7 @@ extension SpacetimeDBClient {
                     try reader.readAlgebraicValue(as: .string),
                     try reader.readAlgebraicValue(as: .uint128)
                 ])
-                print(">>> Identity: \(identityToken)")
+                debugLog(">>> Identity: \(identityToken)")
                 
                 // Store current identity
                 self.currentIdentity = identityToken.identity
@@ -69,15 +69,15 @@ extension SpacetimeDBClient {
             } else if messageTag == Tags.ServerMessage.subscribeMultiApplied.rawValue {
                 // Read SubscribeMultiApplied directly from reader
                 let subscribeMultiApplied = try SubscribeMultiApplied(reader: reader)
-                print(">>> SubscribeMultiApplied: requestId=\(subscribeMultiApplied.requestId), tables=\(subscribeMultiApplied.update.tableUpdates.count)")
+                debugLog(">>> SubscribeMultiApplied: requestId=\(subscribeMultiApplied.requestId), tables=\(subscribeMultiApplied.update.tableUpdates.count)")
                 
                 for tableUpdate in subscribeMultiApplied.update.tableUpdates {
-                    print(">>> Table: \(tableUpdate.name) (id: \(tableUpdate.id), rows: \(tableUpdate.numRows))")
+                    debugLog(">>> Table: \(tableUpdate.name) (id: \(tableUpdate.id), rows: \(tableUpdate.numRows))")
                     
                     do {
                         let queryUpdate = try tableUpdate.getQueryUpdate()
-                        print(">>>   Deletes: \(queryUpdate.deletes.rows.count) rows")
-                        print(">>>   Inserts: \(queryUpdate.inserts.rows.count) rows")
+                        debugLog(">>>   Deletes: \(queryUpdate.deletes.rows.count) rows")
+                        debugLog(">>>   Inserts: \(queryUpdate.inserts.rows.count) rows")
                         
                         let decoder = decoder(forTable: tableUpdate.name)
                         if let decoder {
@@ -85,14 +85,14 @@ extension SpacetimeDBClient {
                             var insertedRows: [Any] = []
                             for (index, row) in queryUpdate.inserts.rows.enumerated() {
                                 do {
-                                    let reader = BSATNReader(data: row)
+                                    let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
                                     let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
                                     guard case .product(let values) = modelValue else { continue }
                                     let typedRow = try decoder.decode(modelValues: values)
                                     insertedRows.append(typedRow)
-                                    print(">>>     Row \(index) for \(tableUpdate.name): \(typedRow)")
+                                    debugLog(">>>     Row \(index) for \(tableUpdate.name): \(typedRow)")
                                 } catch {
-                                    print(">>>     Error decoding row \(index): \(error)")
+                                    debugLog(">>>     Error decoding row \(index): \(error)")
                                 }
                             }
                             
@@ -104,13 +104,13 @@ extension SpacetimeDBClient {
                                     continue
                                 }
                                 do {
-                                    let reader = BSATNReader(data: row)
+                                    let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
                                     let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
                                     guard case .product(let values) = modelValue else { continue }
                                     let typedRow = try decoder.decode(modelValues: values)
                                     deletedRows.append(typedRow)
                                 } catch {
-                                    print(">>>     Error decoding deleted row \(index): \(error)")
+                                    debugLog(">>>     Error decoding deleted row \(index): \(error)")
                                 }
                             }
                             
@@ -122,10 +122,10 @@ extension SpacetimeDBClient {
                                 inserts: insertedRows
                             )
                         } else {
-                            print(">>>   No decoder registered for table: \(tableUpdate.name)")
+                            debugLog(">>>   No decoder registered for table: \(tableUpdate.name)")
                         }
                     } catch {
-                        print(">>>   Error parsing QueryUpdate: \(error)")
+                        debugLog(">>>   Error parsing QueryUpdate: \(error)")
                     }
                 }
                 
@@ -133,8 +133,7 @@ extension SpacetimeDBClient {
                 clientDelegate?.onSubscribeMultiApplied(client: self, queryId: subscribeMultiApplied.queryId)
             } else if messageTag == Tags.ServerMessage.transactionUpdate.rawValue {
                 // Read TransactionUpdate - pass the reader directly instead of remainingData
-                print(">>> Attempting to read TransactionUpdate from offset: \(reader.currentOffset)")
-                print(">>> Remaining bytes: \(reader.remainingBytes)")
+                debugLog(">>> Attempting to read TransactionUpdate from offset: \(reader.currentOffset)")
                 
                 // Create TransactionUpdate with the reader directly
                 let update = try TransactionUpdate(reader: reader)
@@ -143,11 +142,11 @@ extension SpacetimeDBClient {
                 let isOwnUpdate = (update.callerIdentity.description == self.currentIdentity?.description)
                 let updateSource = isOwnUpdate ? "OWN" : "OTHER USER"
                 
-                print(">>> TransactionUpdate from \(updateSource):")
-                print(">>>   Reducer: \(update.reducerName)")
-                print(">>>   Caller: \(update.callerIdentity.description.prefix(16))...")
-                print(">>>   Request ID: \(update.reducerCall.requestId)")
-                print(">>>   Status: \(update.eventStatusDescription)")
+                debugLog(">>> TransactionUpdate from \(updateSource):")
+                debugLog(">>>   Reducer: \(update.reducerName)")
+                debugLog(">>>   Caller: \(update.callerIdentity.description.prefix(16))...")
+                debugLog(">>>   Request ID: \(update.reducerCall.requestId)")
+                debugLog(">>>   Status: \(update.eventStatusDescription)")
                 
                 // Notify delegate about reducer response
                 var errorMessage: String? = nil
@@ -169,7 +168,7 @@ extension SpacetimeDBClient {
                 
                 // Process database updates
                 for tableUpdate in update.databaseUpdate.tableUpdates {
-                    print(">>>   Table: \(tableUpdate.name) with \(tableUpdate.queryUpdates.count) query updates")
+                    debugLog(">>>   Table: \(tableUpdate.name) with \(tableUpdate.queryUpdates.count) query updates")
                     
                     // Get the decoder for this table
                     let decoder = decoder(forTable: tableUpdate.name)
@@ -181,18 +180,18 @@ extension SpacetimeDBClient {
                     // Process each CompressibleQueryUpdate in the table
                     for compUpdate in tableUpdate.queryUpdates {
                         guard case .uncompressed(let queryUpdate) = compUpdate else {
-                            print(">>>     Warning: Compressed updates not yet supported")
+                            debugLog(">>>     Warning: Compressed updates not yet supported")
                             continue
                         }
                         
-                        print(">>>     QueryUpdate: \(queryUpdate.deletes.rows.count) deletes, \(queryUpdate.inserts.rows.count) inserts")
+                        debugLog(">>>     QueryUpdate: \(queryUpdate.deletes.rows.count) deletes, \(queryUpdate.inserts.rows.count) inserts")
                         
                         // Debug: Check row data sizes
                         for (idx, row) in queryUpdate.deletes.rows.enumerated() {
-                            print(">>>       Delete row \(idx): \(row.count) bytes")
+                            debugLog(">>>       Delete row \(idx): \(row.count) bytes")
                         }
                         for (idx, row) in queryUpdate.inserts.rows.enumerated() {
-                            print(">>>       Insert row \(idx): \(row.count) bytes")
+                            debugLog(">>>       Insert row \(idx): \(row.count) bytes")
                         }
                         
                         // Process deletes
@@ -204,13 +203,13 @@ extension SpacetimeDBClient {
                                         continue
                                     }
                                     do {
-                                        let reader = BSATNReader(data: row)
+                                        let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
                                         let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
                                         guard case .product(let values) = modelValue else { continue }
                                         let typedRow = try decoder.decode(modelValues: values)
                                         allDeletedRows.append(typedRow)
                                     } catch {
-                                        print(">>>     Error decoding deleted row: \(error)")
+                                        debugLog(">>>     Error decoding deleted row: \(error)")
                                     }
                                 }
                             } else {
@@ -230,18 +229,18 @@ extension SpacetimeDBClient {
                                         continue
                                     }
                                     do {
-                                        let reader = BSATNReader(data: row)
+                                        let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
                                         let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
                                         guard case .product(let values) = modelValue else { continue }
                                         let typedRow = try decoder.decode(modelValues: values)
                                         allInsertedRows.append(typedRow)
                                         if !isOwnUpdate {
-                                            print(">>>     📢 New row from OTHER USER: \(typedRow)")
+                                            debugLog(">>>     📢 New row from OTHER USER: \(typedRow)")
                                         } else {
-                                            print(">>>     New row (own update): \(typedRow)")
+                                            debugLog(">>>     New row (own update): \(typedRow)")
                                         }
                                     } catch {
-                                        print(">>>     Error decoding inserted row: \(error)")
+                                        debugLog(">>>     Error decoding inserted row: \(error)")
                                     }
                                 }
                             } else {
@@ -255,7 +254,7 @@ extension SpacetimeDBClient {
                     
                     // Always call the delegate if we have any rows (even if just raw data)
                     if !allDeletedRows.isEmpty || !allInsertedRows.isEmpty {
-                        print(">>>   Calling onTableUpdate for '\(tableUpdate.name)': \(allDeletedRows.count) deletes, \(allInsertedRows.count) inserts")
+                        debugLog(">>>   Calling onTableUpdate for '\(tableUpdate.name)': \(allDeletedRows.count) deletes, \(allInsertedRows.count) inserts")
                         await clientDelegate?.onTableUpdate(
                             client: self,
                             table: tableUpdate.name,
@@ -263,12 +262,12 @@ extension SpacetimeDBClient {
                             inserts: allInsertedRows
                         )
                     } else {
-                        print(">>>   No rows to report for table '\(tableUpdate.name)'")
+                        debugLog(">>>   No rows to report for table '\(tableUpdate.name)'")
                     }
                 }
             }
         } catch {
-            print(">>> Failed to decode: \(error)")
+            debugLog(">>> Failed to decode: \(error)")
         }
 
         let onIncomingMessage = clientDelegate?.onIncomingMessage
@@ -276,9 +275,6 @@ extension SpacetimeDBClient {
     }
     
     // MARK: - Hexadecimal Data Viewer
-    
-    /// Set to true to enable hex viewing of incoming messages
-    private var DEBUG_HEX_VIEW: Bool { true }
     
     /// Display data in hexadecimal format (16 bytes per line with offsets)
     private func printHexData(_ data: Data) {

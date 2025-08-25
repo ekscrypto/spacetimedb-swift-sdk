@@ -29,7 +29,7 @@ public struct BsatnRowList {
             throw BSATNError.invalidStructure("Expected array for BsatnRowList")
         }
         
-        print(">>> BsatnRowList: parsing \(arrayValues.count) rows")
+        debugLog(">>> BsatnRowList: parsing \(arrayValues.count) rows")
         
         var rows: [Data] = []
         for (index, value) in arrayValues.enumerated() {
@@ -49,7 +49,7 @@ public struct BsatnRowList {
             if rowData.count > 0 {
                 let preview = rowData.prefix(min(50, rowData.count))
                 let hex = preview.map { String(format: "%02X", $0) }.joined(separator: " ")
-                print(">>>   Row \(index): \(rowData.count) bytes - \(hex)")
+                debugLog(">>>   Row \(index): \(rowData.count) bytes - \(hex)")
                 
                 // Check for readable text
                 let ascii = preview.compactMap { byte -> Character? in
@@ -59,7 +59,7 @@ public struct BsatnRowList {
                     return nil
                 }
                 if !ascii.isEmpty {
-                    print(">>>     ASCII: \(String(ascii))")
+                    debugLog(">>>     ASCII: \(String(ascii))")
                 }
             }
             

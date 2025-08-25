@@ -56,12 +56,12 @@ public struct TransactionUpdate {
             let energyValue: UInt128 = try reader.read()
             self.used = energyValue
             self.budget = UInt128() // Budget might not be sent
-            print(">>> Energy quanta: used=\(self.used)")
+            debugLog(">>> Energy quanta: used=\(self.used)")
         }
     }
     
-    public init(data: Data) throws {
-        let reader = BSATNReader(data: data)
+    public init(data: Data, debugEnabled: Bool = false) throws {
+        let reader = BSATNReader(data: data, debugEnabled: debugEnabled)
         try self.init(reader: reader)
     }
     
@@ -75,41 +75,41 @@ public struct TransactionUpdate {
         // 6. energyQuantaUsed
         // 7. totalHostExecutionDuration
         
-        print(">>> Parsing TransactionUpdate at offset: \(reader.currentOffset), remaining: \(reader.remainingBytes) bytes")
+        debugLog(">>> Parsing TransactionUpdate at offset: \(reader.currentOffset)")
         
         // Read status (which includes DatabaseUpdate if committed)
-        print(">>>   Reading status...")
+        debugLog(">>>   Reading status...")
         self.status = try UpdateStatus(reader: reader)
-        print(">>>   Status: \(status.description)")
+        debugLog(">>>   Status: \(status.description)")
         
         // Read timestamp
-        print(">>>   Reading timestamp...")
+        debugLog(">>>   Reading timestamp...")
         self.timestamp = try reader.read()
-        print(">>>   Timestamp: \(timestamp)")
+        debugLog(">>>   Timestamp: \(timestamp)")
         
         // Read caller identity
-        print(">>>   Reading caller identity...")
+        debugLog(">>>   Reading caller identity...")
         self.callerIdentity = try reader.read()
-        print(">>>   Caller: \(callerIdentity.description.prefix(16))...")
+        debugLog(">>>   Caller: \(callerIdentity.description.prefix(16))...")
         
         // Read caller connection ID  
-        print(">>>   Reading connection ID...")
+        debugLog(">>>   Reading connection ID...")
         self.callerConnectionId = try reader.read()
         
         // Read reducer call info
-        print(">>>   Reading reducer call info...")
+        debugLog(">>>   Reading reducer call info...")
         self.reducerCall = try ReducerCallInfo(reader: reader)
-        print(">>>   Reducer: \(reducerCall.reducerName)")
+        debugLog(">>>   Reducer: \(reducerCall.reducerName)")
         
         // Read energy quanta used
-        print(">>>   Reading energy quanta...")
+        debugLog(">>>   Reading energy quanta...")
         self.energyQuantaUsed = try EnergyQuanta(reader: reader)
         
         // Read total host execution duration
-        print(">>>   Reading execution duration...")
+        debugLog(">>>   Reading execution duration...")
         self.totalHostExecutionDuration = try reader.read()
-        print(">>>   Duration: \(totalHostExecutionDuration) microseconds")
+        debugLog(">>>   Duration: \(totalHostExecutionDuration) microseconds")
         
-        print(">>> TransactionUpdate parsed successfully!")
+        debugLog(">>> TransactionUpdate parsed successfully!")
     }
 }

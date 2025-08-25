@@ -36,11 +36,15 @@ public actor SpacetimeDBClient {
         host: String,
         db dbName: String,
         urlSession: URLSession? = nil,
-        compression: Compression = .none
+        compression: Compression = .none,
+        debugEnabled: Bool = false
     ) throws {
         self.host = host
         self.dbName = dbName
         self.compression = compression
+        self.debugEnabled = debugEnabled
+        // Set global debug configuration
+        DebugConfiguration.shared.setEnabled(debugEnabled)
         if let urlSession {
             guard let delegate = urlSession.delegate as? WebsocketDelegate else {
                 throw Errors.incompatibleUrlSessionDelegate
@@ -59,6 +63,7 @@ public actor SpacetimeDBClient {
     internal let compression: Compression
     public let host: String
     public let dbName: String
+    public let debugEnabled: Bool
     internal var receiveTask: Task<Void, Error>?
     internal weak var clientDelegate: SpacetimeDBClientDelegate?
 

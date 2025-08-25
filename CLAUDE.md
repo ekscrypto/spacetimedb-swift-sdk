@@ -47,6 +47,69 @@ swift build
    - Implement Gzip decompression for `CompressibleQueryUpdate`
    - Implement Brotli decompression
    - Files: `Sources/SpacetimeDB/Server Messages/CompressibleQueryUpdate.swift`
+   
+   **Brotli Implementation Options:**
+   
+   a) **Native iOS 15+ Support** (Recommended if targeting iOS 15+):
+   ```swift
+   import Compression
+   
+   func decompressBrotli(data: Data) -> Data? {
+       let decodedCapacity = 1_000_000 // Adjust based on expected size
+       let decodedBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: decodedCapacity)
+       defer { decodedBuffer.deallocate() }
+       
+       let decodedData: Data? = data.withUnsafeBytes { sourceBuffer in
+           let typedPointer = sourceBuffer.bindMemory(to: UInt8.self)
+           let decompressedSize = compression_decode_buffer(
+               decodedBuffer, decodedCapacity,
+               typedPointer.baseAddress!, data.count,
+               nil, COMPRESSION_BROTLI
+           )
+           
+           guard decompressedSize > 0 else { return nil }
+           return Data(bytes: decodedBuffer, count: decompressedSize)
+       }
+       
+       return decodedData
+   }
+   ```
+   
+   b) **Third-party library options:**
+   - **SwiftBrotli**: Lightweight wrapper, SPM support, works on older iOS versions
+   - **BrotliKit**: Objective-C/Swift library, CocoaPods/SPM support
+   
+   c) **Gzip Support** (Already available in Foundation):
+   ```swift
+   // iOS 13+ has native gzip support
+   let decompressed = try (data as NSData).decompressed(using: .gzip) as Data
+   ```
+   
+   **Implementation approach for CompressibleQueryUpdate:**
+   ```swift
+   extension CompressibleQueryUpdate {
+       func decompress() throws -> Data {
+           switch compression {
+           case .none:
+               return data
+           case .gzip:
+               guard let decompressed = try? (data as NSData).decompressed(using: .gzip) as Data else {
+                   throw SpacetimeDBError.decompressionFailed
+               }
+               return decompressed
+           case .brotli:
+               if #available(iOS 15.0, macOS 12.0, *) {
+                   guard let decompressed = decompressBrotli(data: data) else {
+                       throw SpacetimeDBError.decompressionFailed
+                   }
+                   return decompressed
+               } else {
+                   throw SpacetimeDBError.brotliNotSupported
+               }
+           }
+       }
+   }
+   ```
 
 2. **Reconnection Logic** (High Priority)
    - Add automatic reconnection with exponential backoff
@@ -93,6 +156,35 @@ swift build
 2. No automatic reconnection on connection loss
 3. Cannot unsubscribe from queries once subscribed
 4. No heartbeat/keepalive mechanism
+
+### Test Coverage Gaps
+
+The SDK currently has limited test coverage (~20-30%). Major gaps include:
+
+#### BSATN Data Types Missing Tests
+- **Int256** - Completely untested
+- **BSATNMessageHandler** - Message processing logic
+- **SumModel protocol** - No tests at all
+- **Compression enum** - Compression handling
+- **BSATNError** - Error scenarios
+
+#### Server Messages Missing Tests
+- **IdentityTokenMessage** - Authentication flow
+- **BsatnRowList** - Row data extraction
+- **CompressibleQueryUpdate** - Compression variants
+- **DatabaseUpdate** - Batch update processing
+- **QueryUpdate** - Query result handling
+- **TableUpdate** - Complex table parsing
+- **ReducerCallInfo** - Reducer metadata
+
+#### Client Functionality Missing Tests
+- **Connection lifecycle** - connect/disconnect/reconnect
+- **WebSocket handling** - All delegate methods
+- **Message routing** - receiveMessage logic
+- **Authentication** - Token and identity management
+- **Error handling** - SpacetimeDBErrors scenarios
+
+Priority should be given to testing Int256, server message parsing, and the connection lifecycle as these are critical for SDK reliability.
 
 ## For Contributors
 

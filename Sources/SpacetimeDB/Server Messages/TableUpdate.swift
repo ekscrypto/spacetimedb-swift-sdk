@@ -19,8 +19,13 @@ public struct TableUpdate {
             .uint32,
             .string,
             .uint64,
-            .array(ArrayModel { .sum })  // Array of CompressibleQueryUpdate sum types
+            .array(ArrayModel { .sum(DummySumModel()) })  // Array of CompressibleQueryUpdate sum types
         ]}
+    }
+    
+    // Dummy sum model for CompressibleQueryUpdate
+    struct DummySumModel: SumModel {
+        static var size: UInt32 { 0 }
     }
     
     // Custom array model wrapper
@@ -36,7 +41,7 @@ public struct TableUpdate {
 
     init(modelValues: [AlgebraicValue]) throws {
         let model = Model()
-        print("Will be decoding TableUpdate from values: \(modelValues)")
+        debugLog("Will be decoding TableUpdate from values: \(modelValues)")
         guard modelValues.count == model.definition.count,
               case .uint32(let tableId) = modelValues[0],
               case .string(let tableName) = modelValues[1],
@@ -55,24 +60,24 @@ public struct TableUpdate {
             throw SpacetimeDBErrors.invalidDefinition(model)
         }
         
-        print(">>> TableUpdate: id=\(tableId), name='\(tableName)', numRows=\(numRows), updates=\(updateArray.count)")
+        debugLog(">>> TableUpdate: id=\(tableId), name='\(tableName)', numRows=\(numRows), updates=\(updateArray.count)")
         
         // Parse each CompressibleQueryUpdate from the array
         let updates: [CompressibleQueryUpdate] = []
         for (index, updateValue) in updateArray.enumerated() {
             guard case .sum(let tag, _) = updateValue else {
-                print(">>>   Update \(index): Expected sum type, got \(updateValue)")
+                debugLog(">>>   Update \(index): Expected sum type, got \(updateValue)")
                 continue
             }
             
-            print(">>>   Update \(index): tag=\(tag)")
+            debugLog(">>>   Update \(index): tag=\(tag)")
             
             // For tag 0 (uncompressed), we need to read the QueryUpdate data
             // The sum value has empty data because BSATNReader doesn't know the context
             // We need to provide a way to read the variant data based on the tag
             
             // Since we can't read the data properly yet, skip for now
-            print(">>>   Warning: Cannot parse CompressibleQueryUpdate variant data yet")
+            debugLog(">>>   Warning: Cannot parse CompressibleQueryUpdate variant data yet")
         }
         
         self.queryUpdates = updates
@@ -86,13 +91,13 @@ public struct TableUpdate {
         
         // Read array of CompressibleQueryUpdate
         let updateCount: UInt32 = try reader.read()
-        print(">>> TableUpdate: id=\(id), name='\(name)', numRows=\(numRows), updates=\(updateCount)")
+        debugLog(">>> TableUpdate: id=\(id), name='\(name)', numRows=\(numRows), updates=\(updateCount)")
         
         var updates: [CompressibleQueryUpdate] = []
         for i in 0..<updateCount {
             // Read tag for sum type
             let tag: UInt8 = try reader.read()
-            print(">>>   Update \(i): tag=\(tag)")
+            debugLog(">>>   Update \(i): tag=\(tag)")
             
             if tag == 0 {
                 // Uncompressed: read QueryUpdate with BsatnRowList format
@@ -100,13 +105,13 @@ public struct TableUpdate {
                 
                 // Read deletes BsatnRowList  
                 let deleteTag: UInt8 = try reader.read()
-                print(">>>     Delete tag: \(deleteTag)")
+                debugLog(">>>     Delete tag: \(deleteTag)")
                 
                 var deleteRows: [Data] = []
                 if deleteTag == 1 {
                     // BsatnRowList format
                     let deleteOffsetCount: UInt32 = try reader.read()
-                    print(">>>     Delete offset count: \(deleteOffsetCount)")
+                    debugLog(">>>     Delete offset count: \(deleteOffsetCount)")
                     
                     // Read offset table
                     var deleteOffsets: [UInt64] = []
@@ -117,7 +122,7 @@ public struct TableUpdate {
                     
                     // Read data size
                     let deleteDataSize: UInt32 = try reader.read()
-                    print(">>>     Delete data size: \(deleteDataSize)")
+                    debugLog(">>>     Delete data size: \(deleteDataSize)")
                     
                     // Read the data blob and split by offsets
                     if deleteDataSize > 0 && deleteOffsetCount > 0 {
@@ -132,14 +137,14 @@ public struct TableUpdate {
                             
                             // Make sure offsets are valid
                             guard startOffset <= dataBlob.count && endOffset <= dataBlob.count && startOffset <= endOffset else {
-                                print(">>>     Warning: Invalid offsets for delete row \(i): start=\(startOffset), end=\(endOffset), dataSize=\(dataBlob.count)")
+                                debugLog(">>>     Warning: Invalid offsets for delete row \(i): start=\(startOffset), end=\(endOffset), dataSize=\(dataBlob.count)")
                                 continue
                             }
                             
                             let rowData = Data(dataBlob[startOffset..<endOffset])
                             deleteRows.append(rowData)
                             if rowData.count > 0 {
-                                print(">>>     Delete row \(i): \(rowData.count) bytes")
+                                debugLog(">>>     Delete row \(i): \(rowData.count) bytes")
                             }
                         }
                     } else if deleteDataSize > 0 {
@@ -147,24 +152,24 @@ public struct TableUpdate {
                         let dataBlobSlice = try reader.readBytes(Int(deleteDataSize))
                         let dataBlob = Data(dataBlobSlice)
                         deleteRows.append(dataBlob)
-                        print(">>>     Single delete row: \(dataBlob.count) bytes")
+                        debugLog(">>>     Single delete row: \(dataBlob.count) bytes")
                     }
                 } else if deleteTag == 0 {
                     // Empty list
-                    print(">>>     Empty delete list")
+                    debugLog(">>>     Empty delete list")
                 } else {
-                    print(">>>     Unknown delete format: \(deleteTag)")
+                    debugLog(">>>     Unknown delete format: \(deleteTag)")
                 }
                 
                 // Read inserts BsatnRowList
                 let insertTag: UInt8 = try reader.read()
-                print(">>>     Insert tag: \(insertTag)")
+                debugLog(">>>     Insert tag: \(insertTag)")
                 
                 var insertRows: [Data] = []
                 if insertTag == 1 {
                     // BsatnRowList format
                     let insertOffsetCount: UInt32 = try reader.read()
-                    print(">>>     Insert offset count: \(insertOffsetCount)")
+                    debugLog(">>>     Insert offset count: \(insertOffsetCount)")
                     
                     // Read offset table
                     var insertOffsets: [UInt64] = []
@@ -172,13 +177,13 @@ public struct TableUpdate {
                         let offset: UInt64 = try reader.read()
                         insertOffsets.append(offset)
                         if insertOffsets.count <= 5 {
-                            print(">>>       Offset \(insertOffsets.count - 1): \(offset)")
+                            debugLog(">>>       Offset \(insertOffsets.count - 1): \(offset)")
                         }
                     }
                     
                     // Read data size
                     let insertDataSize: UInt32 = try reader.read()
-                    print(">>>     Insert data size: \(insertDataSize)")
+                    debugLog(">>>     Insert data size: \(insertDataSize)")
                     
                     // Read the data blob and split by offsets
                     if insertDataSize > 0 && insertOffsetCount > 0 {
@@ -193,7 +198,7 @@ public struct TableUpdate {
                             
                             // Make sure offsets are valid
                             guard startOffset <= dataBlob.count && endOffset <= dataBlob.count && startOffset <= endOffset else {
-                                print(">>>     Warning: Invalid offsets for row \(i): start=\(startOffset), end=\(endOffset), dataSize=\(dataBlob.count)")
+                                debugLog(">>>     Warning: Invalid offsets for row \(i): start=\(startOffset), end=\(endOffset), dataSize=\(dataBlob.count)")
                                 continue
                             }
                             
@@ -203,7 +208,7 @@ public struct TableUpdate {
                             if i < 5 {  // Show first few rows
                                 let preview = rowData.prefix(min(50, rowData.count))
                                 let hex = preview.map { String(format: "%02X", $0) }.joined(separator: " ")
-                                print(">>>     Insert row \(i): \(rowData.count) bytes - \(hex)")
+                                debugLog(">>>     Insert row \(i): \(rowData.count) bytes - \(hex)")
                             }
                         }
                     } else if insertDataSize > 0 {
@@ -211,13 +216,13 @@ public struct TableUpdate {
                         let dataBlobSlice = try reader.readBytes(Int(insertDataSize))
                         let dataBlob = Data(dataBlobSlice)
                         insertRows.append(dataBlob)
-                        print(">>>     Single insert row: \(dataBlob.count) bytes")
+                        debugLog(">>>     Single insert row: \(dataBlob.count) bytes")
                     }
                 } else if insertTag == 0 {
                     // Empty list
-                    print(">>>     Empty insert list")
+                    debugLog(">>>     Empty insert list")
                 } else {
-                    print(">>>     Unknown insert format: \(insertTag)")
+                    debugLog(">>>     Unknown insert format: \(insertTag)")
                 }
                 
                 
@@ -229,13 +234,13 @@ public struct TableUpdate {
                 let update = CompressibleQueryUpdate.uncompressed(queryUpdate)
                 updates.append(update)
                 
-                print(">>>     Parsed uncompressed QueryUpdate: \(deleteRows.count) deletes, \(insertRows.count) inserts")
+                debugLog(">>>     Parsed uncompressed QueryUpdate: \(deleteRows.count) deletes, \(insertRows.count) inserts")
                 
                 // Show first insert if available
                 if let firstInsert = insertRows.first, firstInsert.count > 0 {
                     let preview = firstInsert.prefix(min(100, firstInsert.count))
                     let hex = preview.map { String(format: "%02X", $0) }.joined(separator: " ")
-                    print(">>>     First insert preview: \(hex)")
+                    debugLog(">>>     First insert preview: \(hex)")
                 }
             } else {
                 // Compressed: would need to handle Brotli/Gzip

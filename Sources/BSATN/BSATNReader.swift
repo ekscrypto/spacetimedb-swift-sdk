@@ -4,18 +4,24 @@ import Foundation
 public class BSATNReader {
     private let bytes: ContiguousArray<UInt8>
     private var offset: Int = 0
+    private let printDebug: ((String) -> Void)?
     
     public var currentOffset: Int {
         return offset
     }
     
-    public init(data: Data) {
+    public var isDebugEnabled: Bool {
+        return printDebug != nil
+    }
+    
+    public init(data: Data, debugEnabled: Bool = false) {
         bytes = ContiguousArray(data)
+        self.printDebug = debugEnabled ? { print($0) } : nil
     }
     
     /// Read a specified number of bytes
     public func readBytes(_ count: Int) throws -> ArraySlice<UInt8> {
-        print(String(format: ">> %@, offset: 0x%04X, count: %d, total: %d (0x%X)", "\(#function)", offset, count, bytes.count, bytes.count))
+        printDebug?(String(format: ">> %@, offset: 0x%04X, count: %d, total: %d (0x%X)", "\(#function)", offset, count, bytes.count, bytes.count))
         guard offset + count <= bytes.count else {
             throw BSATNError.insufficientData
         }
@@ -27,10 +33,10 @@ public class BSATNReader {
     }
 
     public func read<T: Packed>() throws -> T {
-        print(">> \(#function).\(#line) \(T.self)")
+        printDebug?(">> \(#function).\(#line) \(T.self)")
         let slice = try readBytes(MemoryLayout<T>.size)
         let value: T = try slice.unpacked()
-        print(">> \(#function).\(#line) \(T.self) -> \(value)")
+        printDebug?(">> \(#function).\(#line) \(T.self) -> \(value)")
         return value
     }
     
@@ -47,44 +53,44 @@ public class BSATNReader {
     
     /// Read a string prefixed with a UInt32 length
     public func readString() throws -> String {
-        print(">> \(#function).\(#line)")
+        printDebug?(">> \(#function).\(#line)")
         let length: UInt32 = try read()
-        print(">> \(#function).\(#line)")
+        printDebug?(">>> Read string of \(length) bytes")
         let stringData = try readBytes(Int(length))
-        print(">> \(#function).\(#line)")
+        printDebug?(">> \(#function).\(#line)")
         guard let string = String(data: Data(stringData), encoding: .utf8) else {
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(codingPath: [], 
                                     debugDescription: "Invalid UTF-8 data for string")
             )
         }
-        print(">> \(#function).\(#line) -> \(string)")
+        printDebug?(">>> STRING: \(string)")
         return string
     }
     
     /// Read an array with UInt32 count prefix
     public func readArray(elementReader: () throws -> AlgebraicValue) throws -> [AlgebraicValue] {
-        print(">> \(#function).\(#line)")
+        printDebug?(">> \(#function).\(#line)")
         let count: UInt32 = try read()
         var elements: [AlgebraicValue] = []
         for _ in 0..<count {
-            print(">> \(#function).\(#line)")
+            printDebug?(">> \(#function).\(#line)")
             elements.append(try elementReader())
         }
-        print(">> \(#function).\(#line)")
+        printDebug?(">> \(#function).\(#line)")
         return elements
     }
     
     /// Read a product value (concatenated field values)
     public func readProduct(definition valueTypes: [AlgebraicValueType]) throws -> [AlgebraicValue] {
-        print(">> \(#function).\(#line) \(valueTypes)")
+        printDebug?(">> \(#function).\(#line) \(valueTypes)")
         var values: [AlgebraicValue] = []
         for valueType in valueTypes {
-            print(">> \(#function).\(#line)")
+            printDebug?(">> \(#function).\(#line)")
             let value = try readAlgebraicValue(as: valueType)
             values.append(value)
         }
-        print(">> \(#function).\(#line)")
+        printDebug?(">> \(#function).\(#line)")
         return values
     }
     
@@ -97,7 +103,7 @@ public class BSATNReader {
 
     /// Read any AlgebraicValue - you would specify the type expected
     public func readAlgebraicValue(as type: AlgebraicValueType) throws -> AlgebraicValue {
-        print(">>> \(#line) \(type)")
+        printDebug?(">>> \(#line) \(type)")
         switch type {
         case .bool:
             return .bool(try read())
@@ -135,10 +141,10 @@ public class BSATNReader {
         case .array(let arrayModel):
             let baseType = arrayModel.definition
             let count: UInt32 = try read()
-            print("Attempting to decode \(count) \(arrayModel)")
+            printDebug?("Attempting to decode \(count) \(arrayModel)")
             var values: [AlgebraicValue] = []
             for _ in 0..<count {
-                print(">>> \(#line)")
+                printDebug?(">>> \(#line)")
                 values.append(try readAlgebraicValue(as: baseType))
             }
             return .array(values)
@@ -148,28 +154,44 @@ public class BSATNReader {
                 values.append(try readAlgebraicValue(as: field))
             }
             return .product(values)
-        case .sum:
-            // Read the tag byte  
+        case .sum(_):
+            // Read the tag
             let tag: UInt8 = try read()
-            // For sum types, we don't know the variant structure without context
-            // Return empty data - the caller must handle sum types properly
-            return .sum(tag: tag, value: Data())
-        case .option(let innerType):
-            // Read the tag byte for the option
-            let tag: UInt8 = try read()
-            switch tag {
-            case 0:
-                // Some case - read the inner value and encode it
-                let innerValue = try readAlgebraicValue(as: innerType)
-                // We need to encode the inner value as data for the sum variant
-                let writer = BSATNWriter()
-                try writer.writeAlgebraicValue(innerValue)
-                return .sum(tag: tag, value: writer.finalize())
-            case 1:
-                // None case - no data
+            
+            // For sum types, we need to capture the raw bytes of the variant data
+            // Since we don't know the structure, we need context-specific handling
+            // For optional types: tag 0 = Some (has data), tag 1 = None (no data)
+            
+            // Save current position
+            let startOffset = offset
+            
+            // Try to determine how much data to read based on tag
+            // This is a heuristic approach for optional string types
+            if tag == 1 {
+                // None variant - no data
                 return .sum(tag: tag, value: Data())
-            default:
-                throw BSATNError.unsupportedTag(tag)
+            } else {
+                // Some variant or other - need to capture the variant's data
+                // For optional string, the data should be a string
+                // Try to read it as a string and capture the raw bytes
+                do {
+                    // Read string length
+                    let lengthStart = offset
+                    let length: UInt32 = try read()
+                    // Read string data
+                    let stringBytes = try readBytes(Int(length))
+                    
+                    // Now create the raw data that was read
+                    let endOffset = offset
+                    // Reset to start and capture all the bytes
+                    offset = lengthStart
+                    let rawData = try readBytes(endOffset - lengthStart)
+                    return .sum(tag: tag, value: Data(rawData))
+                } catch {
+                    // If reading as string fails, reset and return empty
+                    offset = startOffset
+                    return .sum(tag: tag, value: Data())
+                }
             }
         }
     }
@@ -184,12 +206,15 @@ public class BSATNReader {
         return offset
     }
     
-    /// Remaining bytes
-    public var remainingBytes: Int {
-        return bytes.count - offset
+    /// Skip forward by the specified number of bytes
+    public func skip(_ count: Int) throws {
+        guard offset + count <= bytes.count else {
+            throw BSATNError.insufficientData
+        }
+        offset += count
     }
     
-    /// Read an optional value (sum type with tag 0=Some, 1=None)
+    /// Read an optional value
     public func readOptional<T>(readValue: () throws -> T) throws -> T? {
         let tag: UInt8 = try read()
         switch tag {
@@ -225,6 +250,5 @@ public enum AlgebraicValueType: Sendable {
     case string
     case array(ArrayModel)
     case product(ProductModel)
-    case sum
-    indirect case option(AlgebraicValueType) // Optional type: tag 0=Some(T), tag 1=None
+    case sum(SumModel)
 }

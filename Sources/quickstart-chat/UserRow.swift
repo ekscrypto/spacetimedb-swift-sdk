@@ -15,10 +15,15 @@ struct UserRow {
     let name: String?     // Optional name
     let online: Bool      // Online status
     
+    // Minimal SumModel for optional string
+    struct OptionalStringSumModel: SumModel {
+        static var size: UInt32 { 2 }  // 2 variants: Some(0) or None(1)
+    }
+    
     struct Model: ProductModel {
         var definition: [AlgebraicValueType] { [
             .uint256,   // identity
-            .option(.string),  // name (optional string)
+            .sum(OptionalStringSumModel()),  // name (optional - sum type with tag 0=Some, 1=None)
             .bool       // online status
         ]}
     }

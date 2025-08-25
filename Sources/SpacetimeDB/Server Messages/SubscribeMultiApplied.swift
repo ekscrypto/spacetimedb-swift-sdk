@@ -52,6 +52,6 @@ struct SubscribeMultiApplied {
         self.queryId = try reader.read()
         self.update = try DatabaseUpdate(reader: reader)
         
-        print(">>> SubscribeMultiApplied: requestId=\(requestId), queryId=\(queryId), hostExec=\(executionDuration)μs, tables=\(update.tableUpdates.count)")
+        debugLog(">>> SubscribeMultiApplied: requestId=\(requestId), queryId=\(queryId), hostExec=\(executionDuration)μs, tables=\(update.tableUpdates.count)")
     }
 }
