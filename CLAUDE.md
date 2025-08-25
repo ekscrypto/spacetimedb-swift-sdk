@@ -150,6 +150,36 @@ swift build
 - Use hex dump for debugging BSATN encoding issues
 - The quickstart-chat app has comprehensive logging for debugging
 
+### Debug Mode Configuration
+
+The SDK includes a built-in debug mode that outputs detailed information about BSATN encoding/decoding and message processing:
+
+**Enabling Debug Mode:**
+```swift
+let client = try SpacetimeDBClient(
+    host: "http://localhost:3000",
+    db: "quickstart-chat",
+    debugEnabled: true  // Enable debug output
+)
+```
+
+**What Debug Mode Shows:**
+- BSATN reader offset tracking and byte consumption
+- Hexadecimal dumps of received messages
+- Detailed parsing steps for all AlgebraicValue types
+- Table row decoding with field-by-field output
+- Connection and subscription events
+- All lines prefixed with ">>" or ">>>" for easy filtering
+
+**Default Behavior:**
+Debug mode is **disabled by default** to keep console output clean in production.
+
+**Implementation Details:**
+- Uses thread-safe `DebugConfiguration` singleton with NSLock
+- Global `debugLog()` function available throughout the SDK
+- Debug state propagates from SpacetimeDBClient to BSATNReader instances
+- Minimal performance impact when disabled (simple nil check)
+
 ### Current Known Issues
 
 1. Compression is not implemented (only uncompressed messages work)
