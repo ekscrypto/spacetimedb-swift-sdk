@@ -31,11 +31,42 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
             let userCount = await database.getUserCount()
             let messageCount = await database.getMessageCount()
             print("📊 Database state: \(userCount) users, \(messageCount) messages")
+            
+            // Display recent message history
+            let messages = await database.getAllMessages()
+            let recentMessages = messages.suffix(10)  // Show last 10 messages
+            
+            if !recentMessages.isEmpty {
+                print("\n📜 Recent message history:")
+                for message in recentMessages {
+                    let users = await database.getAllUsers()
+                    let senderName = users.first(where: { $0.identity == message.sender })?.name ?? "Unknown"
+                    
+                    let date = Date(timeIntervalSince1970: Double(message.sent) / 1_000_000.0)
+                    let formatter = DateFormatter()
+                    formatter.dateFormat = "HH:mm:ss"
+                    let timeString = formatter.string(from: date)
+                    
+                    if message.sender == myIdentity {
+                        print("   [\(timeString)] You: \(message.text)")
+                    } else {
+                        print("   [\(timeString)] \(senderName): \(message.text)")
+                    }
+                }
+            }
         }
     }
     
     func isSubscriptionReady() -> Bool {
         return subscriptionReady
+    }
+    
+    func getAllUsers() async -> [UserRow] {
+        return await database.getAllUsers()
+    }
+    
+    func getMyIdentity() -> UInt256? {
+        return myIdentity
     }
     
     func onConnect(client: SpacetimeDBClient) async {
@@ -125,7 +156,23 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
         for row in inserts {
             if let message = row as? MessageRow {
                 await database.addMessage(message)
-                print("   💬 Added message: \"\(message.text)\" at \(message.sent)")
+                
+                // Look up the sender's name
+                let users = await database.getAllUsers()
+                let senderName = users.first(where: { $0.identity == message.sender })?.name ?? "Unknown"
+                
+                // Format the timestamp
+                let date = Date(timeIntervalSince1970: Double(message.sent) / 1_000_000.0)
+                let formatter = DateFormatter()
+                formatter.dateFormat = "HH:mm:ss"
+                let timeString = formatter.string(from: date)
+                
+                // Display the message (distinguish our own messages)
+                if message.sender == myIdentity {
+                    print("\n➡️  [\(timeString)] You: \(message.text)")
+                } else {
+                    print("\n💬 [\(timeString)] \(senderName): \(message.text)")
+                }
             }
         }
     }

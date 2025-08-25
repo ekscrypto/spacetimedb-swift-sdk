@@ -70,6 +70,23 @@ struct TokenStorage {
 
 @main
 struct QuickstartChat {
+    static func showOnlineUsers(delegate: ChatClientDelegate) async {
+        let users = await delegate.getAllUsers()
+        let onlineUsers = users.filter { $0.online }
+        
+        if onlineUsers.isEmpty {
+            print("📊 No users currently online")
+        } else {
+            print("\n👥 Online Users (\(onlineUsers.count)):")
+            for user in onlineUsers.sorted(by: { ($0.name ?? "") < ($1.name ?? "") }) {
+                let name = user.name ?? "<unnamed>"
+                let identityPreview = String(user.identity.description.prefix(8))
+                print("   🟢 \(name) (\(identityPreview)...)")
+            }
+            print("")
+        }
+    }
+    
     static func startInputLoop(client: SpacetimeDBClient, delegate: ChatClientDelegate) async {
         var shouldQuit = false
         
@@ -96,7 +113,7 @@ struct QuickstartChat {
                         shouldQuit = true
                         
                     case "/name":
-                        if let name = argument {
+                        if let name = argument, !name.isEmpty {
                             print("📝 Setting name to: '\(name)'")
                             let reducer = SetNameReducer(userName: name)
                             do {
@@ -107,22 +124,35 @@ struct QuickstartChat {
                             }
                         } else {
                             print("⚠️  Usage: /name <your name>")
+                            print("   Name cannot be empty")
                         }
+                        
+                    case "/users":
+                        await showOnlineUsers(delegate: delegate)
                         
                     case "/help":
                         print("\n📖 Available Commands:")
                         print("   /quit - Exit the application")
                         print("   /name <name> - Set your name")
+                        print("   /users - Show online users")
                         print("   /help - Show this help message")
-                        print("\nOr just type a message to send to the chat (coming soon!)\n")
+                        print("\nOr just type any text to send a message to the chat!\n")
                         
                     default:
                         print("❓ Unknown command: \(command)")
                         print("   Type /help for available commands")
                     }
                 } else {
-                    // Regular message (for future implementation)
-                    print("💭 Message sending not yet implemented: \(input)")
+                    // Send as a regular message
+                    if !input.isEmpty {
+                        let reducer = SendMessageReducer(text: input)
+                        do {
+                            _ = try await client.callReducer(reducer)
+                            // Message will be displayed when we receive it back
+                        } catch {
+                            print("❌ Failed to send message: \(error)")
+                        }
+                    }
                 }
             }
             
