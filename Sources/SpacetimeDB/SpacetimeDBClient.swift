@@ -17,6 +17,7 @@ public actor SpacetimeDBClient {
         case disconnected
         case invalidServerAddress
         case badServerResponse
+        case unsupportedCompression(String)
     }
 
     public enum Compression: String {
@@ -36,9 +37,14 @@ public actor SpacetimeDBClient {
         host: String,
         db dbName: String,
         urlSession: URLSession? = nil,
-        compression: Compression = .none,
+        compression: Compression = .brotli,
         debugEnabled: Bool = false
     ) throws {
+        // Check for unsupported compression
+        if compression == .gzip {
+            throw Errors.unsupportedCompression("Gzip compression is not currently supported")
+        }
+        
         self.host = host
         self.dbName = dbName
         self.compression = compression

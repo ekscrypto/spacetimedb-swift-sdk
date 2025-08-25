@@ -41,77 +41,31 @@ swift build
 ./.build/debug/quickstart-chat
 ```
 
+### Compression Support
+
+The SDK supports protocol-level compression for WebSocket messages:
+
+```swift
+let client = try SpacetimeDBClient(
+    host: "http://localhost:3000",
+    db: "quickstart-chat",
+    compression: .brotli,  // or .none (default)
+    debugEnabled: false
+)
+```
+
+**Compression options:**
+- `.none` - No compression (default)
+- `.brotli` - Brotli compression (requires iOS 15+/macOS 12+)
+- `.gzip` - Not currently supported (will throw an error)
+
+The SDK automatically handles both protocol-level compression (entire messages) and data-level compression (query updates within messages).
+
+**Note:** Gzip compression is defined in the enum but not currently implemented. Attempting to use `.gzip` will result in an `unsupportedCompression` error.
+
 ### Priority Roadmap Items
 
-1. **Compression Support** (High Priority)
-   - Implement Gzip decompression for `CompressibleQueryUpdate`
-   - Implement Brotli decompression
-   - Files: `Sources/SpacetimeDB/Server Messages/CompressibleQueryUpdate.swift`
-   
-   **Brotli Implementation Options:**
-   
-   a) **Native iOS 15+ Support** (Recommended if targeting iOS 15+):
-   ```swift
-   import Compression
-   
-   func decompressBrotli(data: Data) -> Data? {
-       let decodedCapacity = 1_000_000 // Adjust based on expected size
-       let decodedBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: decodedCapacity)
-       defer { decodedBuffer.deallocate() }
-       
-       let decodedData: Data? = data.withUnsafeBytes { sourceBuffer in
-           let typedPointer = sourceBuffer.bindMemory(to: UInt8.self)
-           let decompressedSize = compression_decode_buffer(
-               decodedBuffer, decodedCapacity,
-               typedPointer.baseAddress!, data.count,
-               nil, COMPRESSION_BROTLI
-           )
-           
-           guard decompressedSize > 0 else { return nil }
-           return Data(bytes: decodedBuffer, count: decompressedSize)
-       }
-       
-       return decodedData
-   }
-   ```
-   
-   b) **Third-party library options:**
-   - **SwiftBrotli**: Lightweight wrapper, SPM support, works on older iOS versions
-   - **BrotliKit**: Objective-C/Swift library, CocoaPods/SPM support
-   
-   c) **Gzip Support** (Already available in Foundation):
-   ```swift
-   // iOS 13+ has native gzip support
-   let decompressed = try (data as NSData).decompressed(using: .gzip) as Data
-   ```
-   
-   **Implementation approach for CompressibleQueryUpdate:**
-   ```swift
-   extension CompressibleQueryUpdate {
-       func decompress() throws -> Data {
-           switch compression {
-           case .none:
-               return data
-           case .gzip:
-               guard let decompressed = try? (data as NSData).decompressed(using: .gzip) as Data else {
-                   throw SpacetimeDBError.decompressionFailed
-               }
-               return decompressed
-           case .brotli:
-               if #available(iOS 15.0, macOS 12.0, *) {
-                   guard let decompressed = decompressBrotli(data: data) else {
-                       throw SpacetimeDBError.decompressionFailed
-                   }
-                   return decompressed
-               } else {
-                   throw SpacetimeDBError.brotliNotSupported
-               }
-           }
-       }
-   }
-   ```
-
-2. **Reconnection Logic** (High Priority)
+1. **Reconnection Logic** (High Priority)
    - Add automatic reconnection with exponential backoff
    - Maintain subscription state across reconnections
    - File: `Sources/SpacetimeDB/SpacetimeDBClient.swift`
@@ -182,7 +136,7 @@ Debug mode is **disabled by default** to keep console output clean in production
 
 ### Current Known Issues
 
-1. Compression is not implemented (only uncompressed messages work)
+1. Gzip compression is not implemented (Brotli and uncompressed messages work)
 2. No automatic reconnection on connection loss
 3. Cannot unsubscribe from queries once subscribed
 4. No heartbeat/keepalive mechanism

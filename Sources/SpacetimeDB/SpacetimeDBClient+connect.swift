@@ -17,6 +17,21 @@ extension SpacetimeDBClient {
         guard webSocketTask == nil else {
             throw Errors.alreadyConnected
         }
+        
+        // Validate compression support before attempting connection
+        switch compression {
+        case .none:
+            // Always supported
+            break
+        case .gzip:
+            // Gzip is not currently supported
+            throw Errors.unsupportedCompression("Gzip compression is not currently supported")
+        case .brotli:
+            // Brotli requires iOS 15+/macOS 12+ via Compression framework
+            // Our minimum targets support this
+            break
+        }
+        
         guard let socketDelegate = urlSession.delegate as? WebsocketDelegate else {
             throw Errors.incompatibleUrlSessionDelegate
         }

@@ -242,8 +242,22 @@ public struct TableUpdate {
                     let hex = preview.map { String(format: "%02X", $0) }.joined(separator: " ")
                     debugLog(">>>     First insert preview: \(hex)")
                 }
+            } else if tag == 1 {
+                // Brotli compressed
+                let compressedSize: UInt32 = try reader.read()
+                let compressedData = try reader.readBytes(Int(compressedSize))
+                let update = CompressibleQueryUpdate.brotli(Data(compressedData))
+                updates.append(update)
+                debugLog(">>>     Brotli compressed QueryUpdate: \(compressedSize) bytes")
+            } else if tag == 2 {
+                // Gzip compressed
+                let compressedSize: UInt32 = try reader.read()
+                let compressedData = try reader.readBytes(Int(compressedSize))
+                let update = CompressibleQueryUpdate.gzip(Data(compressedData))
+                updates.append(update)
+                debugLog(">>>     Gzip compressed QueryUpdate: \(compressedSize) bytes")
             } else {
-                // Compressed: would need to handle Brotli/Gzip
+                // Unknown compression tag
                 throw BSATNError.unsupportedTag(tag)
             }
         }

@@ -7,6 +7,7 @@
 
 import Foundation
 import BSATN
+import Compression
 
 extension SpacetimeDBClient {
     internal func receiveMessage() async throws {
@@ -16,37 +17,80 @@ extension SpacetimeDBClient {
 
     receiveNextMessage:
         while !Task.isCancelled {
+            debugLog(">>> Waiting for WebSocket message...")
             let message = try await webSocketTask.receive()
+            debugLog(">>> WebSocket message received")
             switch message {
             case .data(let data):
+                debugLog(">>> Received binary data: \(data.count) bytes")
                 await processOrForwardMessage(data)
             case .string(let string):
+                debugLog(">>> Received string data: \(string.count) chars")
                 guard let data = string.data(using: .utf8) else {
                     continue receiveNextMessage
                 }
                 await processOrForwardMessage(data)
             @unknown default:
+                debugLog(">>> Received unknown message type")
                 break
             }
         }
     }
 
     private func processOrForwardMessage(_ data: Data) async {
+        debugLog(">>> processOrForwardMessage called with \(data.count) bytes")
+        
         // Display hex representation of the data before processing
-        if debugEnabled {
+        if debugEnabled && data.count <= 2048 {
             print("=== Received BSATN Message ===")
             printHexData(data)
+            print("==============================")
+        } else if debugEnabled {
+            print("=== Received Large BSATN Message ===")
+            print("Size: \(data.count) bytes (hex dump skipped)")
+            print("First 16 bytes: \(data.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " "))")
             print("==============================")
         }
         
         // Process the BSATN message
-        let reader = BSATNReader(data: data, debugEnabled: debugEnabled)
+        debugLog(">>> Creating BSATNReader with \(data.count) bytes (first byte: 0x\(String(format: "%02X", data.first ?? 0)))")
+        var reader = BSATNReader(data: data, debugEnabled: debugEnabled)
         
-        // Read compression tag (should be 0 for none)
-        let compressionTag: UInt8 = (try? reader.read()) ?? 0
-        if compressionTag != Tags.Compression.none.rawValue {
-            debugLog(">>> Warning: Compressed messages not yet supported (compression: \(compressionTag))")
+        // Read compression tag
+        let compressionTag: UInt8
+        do {
+            compressionTag = try reader.read()
+            debugLog(">>> Compression tag: \(compressionTag)")
+        } catch {
+            debugLog(">>> Error reading compression tag: \(error)")
             return
+        }
+        
+        // Handle compression if needed
+        if compressionTag != Tags.Compression.none.rawValue {
+            debugLog(">>> Compressed message detected (compression: \(compressionTag))")
+            
+            // The rest of the data is compressed
+            let compressedData = reader.remainingData()
+            var decompressedData: Data?
+            
+            if compressionTag == Tags.Compression.brotli.rawValue {
+                debugLog(">>> Decompressing Brotli message: \(compressedData.count) bytes")
+                decompressedData = decompressBrotli(data: compressedData)
+            } else if compressionTag == Tags.Compression.gzip.rawValue {
+                debugLog(">>> Gzip compression is not currently supported")
+                return
+            }
+            
+            guard let decompressed = decompressedData else {
+                debugLog(">>> Failed to decompress message")
+                return
+            }
+            
+            debugLog(">>> Decompressed to: \(decompressed.count) bytes")
+            
+            // Create a new reader with the decompressed data
+            reader = BSATNReader(data: decompressed, debugEnabled: debugEnabled)
         }
         
         // Read message type tag
@@ -280,8 +324,10 @@ extension SpacetimeDBClient {
     private func printHexData(_ data: Data) {
         let bytes = Array(data)
         let bytesPerLine = 16
+        let maxBytes = 2048  // Limit hex dump to first 2KB to avoid hanging
+        let bytesToPrint = min(bytes.count, maxBytes)
         
-        for i in stride(from: 0, to: bytes.count, by: bytesPerLine) {
+        for i in stride(from: 0, to: bytesToPrint, by: bytesPerLine) {
             // Print offset in hex
             print(String(format: "0x%08X: ", i), terminator: "")
             
@@ -316,6 +362,43 @@ extension SpacetimeDBClient {
             print("|")
         }
         
+        if bytes.count > maxBytes {
+            print("... (truncated, showing first \(maxBytes) of \(bytes.count) bytes)")
+        }
+        
         print(String(format: "Total bytes: %d (0x%X)", data.count, data.count))
+    }
+    
+    // MARK: - Decompression Helpers
+    
+    /// Decompress Brotli data using native Compression framework
+    private func decompressBrotli(data: Data) -> Data? {
+        // Estimate decompressed size - use a much larger buffer for safety
+        let decodedCapacity = max(data.count * 50, 1024 * 1024) // At least 1MB buffer
+        let decodedBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: decodedCapacity)
+        defer { decodedBuffer.deallocate() }
+        
+        debugLog(">>> Attempting Brotli decompression: \(data.count) bytes -> buffer: \(decodedCapacity) bytes")
+        
+        let decodedData: Data? = data.withUnsafeBytes { sourceBuffer in
+            guard let sourcePtr = sourceBuffer.bindMemory(to: UInt8.self).baseAddress else {
+                return nil
+            }
+            
+            let decompressedSize = compression_decode_buffer(
+                decodedBuffer, decodedCapacity,
+                sourcePtr, data.count,
+                nil, COMPRESSION_BROTLI
+            )
+            
+            guard decompressedSize > 0 else { 
+                debugLog(">>> Brotli decompression failed, returned: \(decompressedSize)")
+                return nil 
+            }
+            debugLog(">>> Brotli decompression successful: \(decompressedSize) bytes")
+            return Data(bytes: decodedBuffer, count: decompressedSize)
+        }
+        
+        return decodedData
     }
 }

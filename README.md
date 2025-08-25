@@ -64,16 +64,19 @@ For comparison and reference, see the official SpacetimeDB quickstart tutorials:
 import SpacetimeDB
 import BSATN
 
-let client = SpacetimeDBClient(
+let client = try SpacetimeDBClient(
   host: "http://localhost:3000", 
-  db: "quickstart-chat")
+  db: "quickstart-chat",
+  compression: .brotli,  // Default is .brotli, can also use .none
+  debugEnabled: false    // Set to true for detailed logging
+)
 
 // Register table decoders
 await client.registerTableRowDecoder(table: "user", decoder: UserRowDecoder())
 await client.registerTableRowDecoder(table: "message", decoder: MessageRowDecoder())
 
 // Connect with optional saved token
-let connectionId = try await client.connect(token: savedToken, delegate: myDelegate)
+try await client.connect(token: savedToken, delegate: myDelegate)
 ```
 
 ### Subscribing to tables
@@ -165,8 +168,8 @@ let requestId = try await client.callReducer(reducer)
 ### Compression Support
 
 - ✅ **Uncompressed**: Full support for uncompressed messages
-- ❌ **Gzip**: Parsing structure exists but decompression not implemented
-- ❌ **Brotli**: Parsing structure exists but decompression not implemented
+- ✅ **Brotli**: Full support (default compression, requires iOS 15+/macOS 12+)
+- ❌ **Gzip**: Not implemented (will throw error if attempted)
 
 ### WebSocket Features
 
@@ -195,7 +198,7 @@ let requestId = try await client.callReducer(reducer)
 
 ### Known Limitations
 
-1. **Compression**: Only uncompressed messages are supported. Gzip and Brotli compression are recognized but not decompressed.
+1. **Gzip Compression**: Gzip compression is not supported (Brotli and uncompressed work)
 2. **Large Messages**: No streaming support for very large messages
 3. **Reconnection**: No automatic reconnection logic
 4. **Subscription Management**: Cannot unsubscribe from queries
@@ -205,7 +208,7 @@ let requestId = try await client.callReducer(reducer)
 ### Roadmap / TODO
 
 - [ ] Implement Gzip decompression
-- [ ] Implement Brotli decompression  
+- [x] ~~Implement Brotli decompression~~ ✅ Completed
 - [ ] Add automatic reconnection with exponential backoff
 - [ ] Implement unsubscribe functionality
 - [ ] Add one-off query support

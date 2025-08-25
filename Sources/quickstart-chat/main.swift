@@ -165,6 +165,7 @@ struct QuickstartChat {
     }
     
     static func main() async {
+        print("Starting SpacetimeDB Client...")
         print("SpacetimeDB Quickstart Chat Client")
         print("==========================================")
         print("Host: http://localhost:3000")
