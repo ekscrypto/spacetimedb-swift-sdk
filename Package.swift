@@ -39,5 +39,9 @@ let package = Package(
             name: "spacetimedb-swift-sdkTests",
             dependencies: ["spacetimedb-swift-sdk"]
         ),
+        .testTarget(
+            name: "BSATNTests",
+            dependencies: ["BSATN"]
+        ),
     ]
 )

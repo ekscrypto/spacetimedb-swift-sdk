@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import BSATN
 
 public actor SpacetimeDBClient {
 
@@ -63,6 +64,7 @@ public actor SpacetimeDBClient {
 
     public var connected: Bool { _connected }
     internal var _connected: Bool = false
+    internal var currentIdentity: UInt256?
 
     internal var nextRequestId: UInt32 {
         _nextRequestId += 1

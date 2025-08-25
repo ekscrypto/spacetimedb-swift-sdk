@@ -63,9 +63,9 @@ extension SpacetimeDBClient {
                 ])
                 print(">>> Identity: \(identityToken)")
                 
-                // Notify delegate about the identity token
-                let identityHex = identityToken.identity.description
-                await clientDelegate?.onIdentityReceived(client: self, token: identityToken.token, identity: identityHex)
+                // Store current identity
+                self.currentIdentity = identityToken.identity
+                await clientDelegate?.onIdentityReceived(client: self, token: identityToken.token, identity: identityToken.identity)
             } else if messageTag == Tags.ServerMessage.subscribeMultiApplied.rawValue {
                 // Read SubscribeMultiApplied directly from reader
                 let subscribeMultiApplied = try SubscribeMultiApplied(reader: reader)
@@ -99,6 +99,10 @@ extension SpacetimeDBClient {
                             // Process deletes
                             var deletedRows: [Any] = []
                             for (index, row) in queryUpdate.deletes.rows.enumerated() {
+                                // Skip empty row data
+                                if row.isEmpty {
+                                    continue
+                                }
                                 do {
                                     let reader = BSATNReader(data: row)
                                     let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
@@ -111,12 +115,12 @@ extension SpacetimeDBClient {
                             }
                             
                             // Notify delegate
-                            if !insertedRows.isEmpty {
-                                await clientDelegate?.onRowsInserted(client: self, table: tableUpdate.name, rows: insertedRows)
-                            }
-                            if !deletedRows.isEmpty {
-                                await clientDelegate?.onRowsDeleted(client: self, table: tableUpdate.name, rows: deletedRows)
-                            }
+                            await clientDelegate?.onTableUpdate(
+                                client: self,
+                                table: tableUpdate.name,
+                                deletes: deletedRows,
+                                inserts: insertedRows
+                            )
                         } else {
                             print(">>>   No decoder registered for table: \(tableUpdate.name)")
                         }
@@ -127,6 +131,141 @@ extension SpacetimeDBClient {
                 
                 // Notify delegate
                 clientDelegate?.onSubscribeMultiApplied(client: self, queryId: subscribeMultiApplied.queryId)
+            } else if messageTag == Tags.ServerMessage.transactionUpdate.rawValue {
+                // Read TransactionUpdate - pass the reader directly instead of remainingData
+                print(">>> Attempting to read TransactionUpdate from offset: \(reader.currentOffset)")
+                print(">>> Remaining bytes: \(reader.remainingBytes)")
+                
+                // Create TransactionUpdate with the reader directly
+                let update = try TransactionUpdate(reader: reader)
+                
+                // Check if this is from another user
+                let isOwnUpdate = (update.callerIdentity.description == self.currentIdentity?.description)
+                let updateSource = isOwnUpdate ? "OWN" : "OTHER USER"
+                
+                print(">>> TransactionUpdate from \(updateSource):")
+                print(">>>   Reducer: \(update.reducerName)")
+                print(">>>   Caller: \(update.callerIdentity.description.prefix(16))...")
+                print(">>>   Request ID: \(update.reducerCall.requestId)")
+                print(">>>   Status: \(update.eventStatusDescription)")
+                
+                // Notify delegate about reducer response
+                var errorMessage: String? = nil
+                if case .failed(let message) = update.status {
+                    errorMessage = message
+                }
+                
+                await clientDelegate?.onReducerResponse(
+                    client: self,
+                    reducer: update.reducerName,
+                    requestId: update.reducerCall.requestId,
+                    status: update.eventStatusDescription,
+                    message: errorMessage,
+                    energyUsed: update.energyQuantaUsed.used
+                )
+                
+                // Name changes will be detected and displayed by the delegate
+                // when it compares the cached names with the new data
+                
+                // Process database updates
+                for tableUpdate in update.databaseUpdate.tableUpdates {
+                    print(">>>   Table: \(tableUpdate.name) with \(tableUpdate.queryUpdates.count) query updates")
+                    
+                    // Get the decoder for this table
+                    let decoder = decoder(forTable: tableUpdate.name)
+                    
+                    // Collect ALL deletes and inserts for this table across all QueryUpdates
+                    var allDeletedRows: [Any] = []
+                    var allInsertedRows: [Any] = []
+                    
+                    // Process each CompressibleQueryUpdate in the table
+                    for compUpdate in tableUpdate.queryUpdates {
+                        guard case .uncompressed(let queryUpdate) = compUpdate else {
+                            print(">>>     Warning: Compressed updates not yet supported")
+                            continue
+                        }
+                        
+                        print(">>>     QueryUpdate: \(queryUpdate.deletes.rows.count) deletes, \(queryUpdate.inserts.rows.count) inserts")
+                        
+                        // Debug: Check row data sizes
+                        for (idx, row) in queryUpdate.deletes.rows.enumerated() {
+                            print(">>>       Delete row \(idx): \(row.count) bytes")
+                        }
+                        for (idx, row) in queryUpdate.inserts.rows.enumerated() {
+                            print(">>>       Insert row \(idx): \(row.count) bytes")
+                        }
+                        
+                        // Process deletes
+                        if !queryUpdate.deletes.rows.isEmpty {
+                            if let decoder {
+                                for row in queryUpdate.deletes.rows {
+                                    // Skip empty row data (common in TransactionUpdate)
+                                    if row.isEmpty {
+                                        continue
+                                    }
+                                    do {
+                                        let reader = BSATNReader(data: row)
+                                        let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
+                                        guard case .product(let values) = modelValue else { continue }
+                                        let typedRow = try decoder.decode(modelValues: values)
+                                        allDeletedRows.append(typedRow)
+                                    } catch {
+                                        print(">>>     Error decoding deleted row: \(error)")
+                                    }
+                                }
+                            } else {
+                                // No decoder, pass raw data
+                                for row in queryUpdate.deletes.rows where !row.isEmpty {
+                                    allDeletedRows.append(row)
+                                }
+                            }
+                        }
+                        
+                        // Process inserts
+                        if !queryUpdate.inserts.rows.isEmpty {
+                            if let decoder {
+                                for row in queryUpdate.inserts.rows {
+                                    // Skip empty row data (common in TransactionUpdate)
+                                    if row.isEmpty {
+                                        continue
+                                    }
+                                    do {
+                                        let reader = BSATNReader(data: row)
+                                        let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
+                                        guard case .product(let values) = modelValue else { continue }
+                                        let typedRow = try decoder.decode(modelValues: values)
+                                        allInsertedRows.append(typedRow)
+                                        if !isOwnUpdate {
+                                            print(">>>     📢 New row from OTHER USER: \(typedRow)")
+                                        } else {
+                                            print(">>>     New row (own update): \(typedRow)")
+                                        }
+                                    } catch {
+                                        print(">>>     Error decoding inserted row: \(error)")
+                                    }
+                                }
+                            } else {
+                                // No decoder, pass raw data
+                                for row in queryUpdate.inserts.rows where !row.isEmpty {
+                                    allInsertedRows.append(row)
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Always call the delegate if we have any rows (even if just raw data)
+                    if !allDeletedRows.isEmpty || !allInsertedRows.isEmpty {
+                        print(">>>   Calling onTableUpdate for '\(tableUpdate.name)': \(allDeletedRows.count) deletes, \(allInsertedRows.count) inserts")
+                        await clientDelegate?.onTableUpdate(
+                            client: self,
+                            table: tableUpdate.name,
+                            deletes: allDeletedRows,
+                            inserts: allInsertedRows
+                        )
+                    } else {
+                        print(">>>   No rows to report for table '\(tableUpdate.name)'")
+                    }
+                }
             }
         } catch {
             print(">>> Failed to decode: \(error)")

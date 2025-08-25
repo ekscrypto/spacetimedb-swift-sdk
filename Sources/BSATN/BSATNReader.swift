@@ -5,6 +5,10 @@ public class BSATNReader {
     private let bytes: ContiguousArray<UInt8>
     private var offset: Int = 0
     
+    public var currentOffset: Int {
+        return offset
+    }
+    
     public init(data: Data) {
         bytes = ContiguousArray(data)
     }
@@ -28,6 +32,11 @@ public class BSATNReader {
         let value: T = try slice.unpacked()
         print(">> \(#function).\(#line) \(T.self) -> \(value)")
         return value
+    }
+    
+    /// Returns all remaining data from the current offset
+    public func remainingData() -> Data {
+        return Data(bytes[offset..<bytes.count])
     }
 
     /// Read a boolean value

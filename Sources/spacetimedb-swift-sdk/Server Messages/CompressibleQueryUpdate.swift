@@ -9,13 +9,13 @@ import Foundation
 import BSATN
 
 /// Represents a query update that can be compressed or uncompressed
-enum CompressibleQueryUpdate {
+public enum CompressibleQueryUpdate {
     case uncompressed(QueryUpdate)
     case brotli(Data)
     case gzip(Data)
     
     /// Get the uncompressed QueryUpdate
-    func getQueryUpdate() throws -> QueryUpdate {
+    public func getQueryUpdate() throws -> QueryUpdate {
         switch self {
         case .uncompressed(let queryUpdate):
             return queryUpdate

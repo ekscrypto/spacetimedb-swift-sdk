@@ -8,11 +8,15 @@
 import Foundation
 import BSATN
 
-struct DatabaseUpdate {
-    let tableUpdates: [TableUpdate]
+public struct DatabaseUpdate {
+    public let tableUpdates: [TableUpdate]
 
     struct Model: ArrayModel {
         let definition: AlgebraicValueType = .product(TableUpdate.Model())
+    }
+    
+    public init(tableUpdates: [TableUpdate]) {
+        self.tableUpdates = tableUpdates
     }
 
     init(modelValues: [AlgebraicValue]) throws {
@@ -35,6 +39,7 @@ struct DatabaseUpdate {
     // Alternative init that reads directly from BSATNReader
     init(reader: BSATNReader) throws {
         // Read array of TableUpdate
+        print(">>>   About to read table count at offset: \(reader.currentOffset)")
         let tableCount: UInt32 = try reader.read()
         print(">>> DatabaseUpdate: \(tableCount) tables")
         

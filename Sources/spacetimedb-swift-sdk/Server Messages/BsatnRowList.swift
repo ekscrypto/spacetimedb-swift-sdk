@@ -9,8 +9,8 @@ import Foundation
 import BSATN
 
 /// Represents a list of BSATN-encoded rows
-struct BsatnRowList {
-    let rows: [Data]
+public struct BsatnRowList {
+    public let rows: [Data]
     
     struct Model: ArrayModel {
         var definition: AlgebraicValueType { 

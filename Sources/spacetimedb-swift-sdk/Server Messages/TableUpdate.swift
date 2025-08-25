@@ -8,11 +8,11 @@
 import Foundation
 import BSATN
 
-struct TableUpdate {
-    let id: UInt32
-    let name: String
-    let numRows: UInt64
-    let queryUpdates: [CompressibleQueryUpdate]  // Array of updates
+public struct TableUpdate {
+    public let id: UInt32
+    public let name: String
+    public let numRows: UInt64
+    public let queryUpdates: [CompressibleQueryUpdate]  // Array of updates
 
     struct Model: ProductModel {
         var definition: [AlgebraicValueType] { [
@@ -120,13 +120,15 @@ struct TableUpdate {
                     print(">>>     Delete data size: \(deleteDataSize)")
                     
                     // Read the data blob and split by offsets
-                    if deleteDataSize > 0 {
+                    if deleteDataSize > 0 && deleteOffsetCount > 0 {
                         let dataBlobSlice = try reader.readBytes(Int(deleteDataSize))
                         let dataBlob = Data(dataBlobSlice)
                         
+                        // Offsets indicate the START position of each row in the data blob
+                        // Row i starts at deleteOffsets[i] and ends at deleteOffsets[i+1] (or end of blob for last row)
                         for i in 0..<Int(deleteOffsetCount) {
-                            let startOffset = i > 0 ? Int(deleteOffsets[i - 1]) : 0
-                            let endOffset = Int(deleteOffsets[i])
+                            let startOffset = Int(deleteOffsets[i])
+                            let endOffset = (i + 1 < deleteOffsetCount) ? Int(deleteOffsets[i + 1]) : dataBlob.count
                             
                             // Make sure offsets are valid
                             guard startOffset <= dataBlob.count && endOffset <= dataBlob.count && startOffset <= endOffset else {
@@ -136,8 +138,20 @@ struct TableUpdate {
                             
                             let rowData = Data(dataBlob[startOffset..<endOffset])
                             deleteRows.append(rowData)
+                            if rowData.count > 0 {
+                                print(">>>     Delete row \(i): \(rowData.count) bytes")
+                            }
                         }
+                    } else if deleteDataSize > 0 {
+                        // Single row with no offset table (entire data is one row)
+                        let dataBlobSlice = try reader.readBytes(Int(deleteDataSize))
+                        let dataBlob = Data(dataBlobSlice)
+                        deleteRows.append(dataBlob)
+                        print(">>>     Single delete row: \(dataBlob.count) bytes")
                     }
+                } else if deleteTag == 0 {
+                    // Empty list
+                    print(">>>     Empty delete list")
                 } else {
                     print(">>>     Unknown delete format: \(deleteTag)")
                 }
@@ -167,13 +181,15 @@ struct TableUpdate {
                     print(">>>     Insert data size: \(insertDataSize)")
                     
                     // Read the data blob and split by offsets
-                    if insertDataSize > 0 {
+                    if insertDataSize > 0 && insertOffsetCount > 0 {
                         let dataBlobSlice = try reader.readBytes(Int(insertDataSize))
                         let dataBlob = Data(dataBlobSlice)
                         
+                        // Offsets indicate the START position of each row in the data blob
+                        // Row i starts at insertOffsets[i] and ends at insertOffsets[i+1] (or end of blob for last row)
                         for i in 0..<Int(insertOffsetCount) {
-                            let startOffset = i > 0 ? Int(insertOffsets[i - 1]) : 0
-                            let endOffset = Int(insertOffsets[i])
+                            let startOffset = Int(insertOffsets[i])
+                            let endOffset = (i + 1 < insertOffsetCount) ? Int(insertOffsets[i + 1]) : dataBlob.count
                             
                             // Make sure offsets are valid
                             guard startOffset <= dataBlob.count && endOffset <= dataBlob.count && startOffset <= endOffset else {
@@ -190,7 +206,16 @@ struct TableUpdate {
                                 print(">>>     Insert row \(i): \(rowData.count) bytes - \(hex)")
                             }
                         }
+                    } else if insertDataSize > 0 {
+                        // Single row with no offset table (entire data is one row)
+                        let dataBlobSlice = try reader.readBytes(Int(insertDataSize))
+                        let dataBlob = Data(dataBlobSlice)
+                        insertRows.append(dataBlob)
+                        print(">>>     Single insert row: \(dataBlob.count) bytes")
                     }
+                } else if insertTag == 0 {
+                    // Empty list
+                    print(">>>     Empty insert list")
                 } else {
                     print(">>>     Unknown insert format: \(insertTag)")
                 }

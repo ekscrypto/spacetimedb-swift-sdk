@@ -9,9 +9,9 @@ import Foundation
 import BSATN
 
 /// Represents a query update containing deletes and inserts
-struct QueryUpdate {
-    let deletes: BsatnRowList
-    let inserts: BsatnRowList
+public struct QueryUpdate {
+    public let deletes: BsatnRowList
+    public let inserts: BsatnRowList
     
     struct Model: ProductModel {
         var definition: [AlgebraicValueType] { [

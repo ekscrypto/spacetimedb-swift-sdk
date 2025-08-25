@@ -2,6 +2,25 @@ import Foundation
 import spacetimedb_swift_sdk
 import BSATN
 
+extension Data {
+    init?(hexString: String) {
+        let hex = hexString.replacingOccurrences(of: " ", with: "")
+        guard hex.count % 2 == 0 else { return nil }
+        
+        var data = Data(capacity: hex.count / 2)
+        var index = hex.startIndex
+        
+        while index < hex.endIndex {
+            let nextIndex = hex.index(index, offsetBy: 2)
+            guard let byte = UInt8(hex[index..<nextIndex], radix: 16) else { return nil }
+            data.append(byte)
+            index = nextIndex
+        }
+        
+        self = data
+    }
+}
+
 // Token persistence
 struct TokenStorage {
     static let tokenFileURL: URL = {
@@ -11,11 +30,11 @@ struct TokenStorage {
     
     struct StoredIdentity: Codable {
         let token: String
-        let identity: String
+        let identity: BSATN.UInt256
         let savedAt: Date
     }
     
-    static func save(token: String, identity: String) {
+    static func save(token: String, identity: BSATN.UInt256) {
         let stored = StoredIdentity(token: token, identity: identity, savedAt: Date())
         do {
             let data = try JSONEncoder().encode(stored)
@@ -31,7 +50,7 @@ struct TokenStorage {
             let data = try Data(contentsOf: tokenFileURL)
             let stored = try JSONDecoder().decode(StoredIdentity.self, from: data)
             print("🔑 Loaded saved identity (saved \(stored.savedAt))")
-            print("   Identity: \(String(stored.identity.prefix(16)))...")
+            print("   Identity: \(stored.identity.description)...")
             return AuthenticationToken(rawValue: stored.token)
         } catch {
             print("ℹ️ No saved identity found (\(error.localizedDescription))")
@@ -51,6 +70,70 @@ struct TokenStorage {
 
 @main
 struct QuickstartChat {
+    static func startInputLoop(client: SpacetimeDBClient, delegate: ChatClientDelegate) async {
+        var shouldQuit = false
+        
+        // Wait for subscription to be ready
+        while !delegate.isSubscriptionReady() {
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        }
+        
+        print("\n✅ Subscription ready! You can now use commands.")
+        print("💬 Type /help for available commands\n")
+        
+        while !shouldQuit {
+            // Read input from stdin
+            if let input = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines), !input.isEmpty {
+                // Check if it's a command
+                if input.hasPrefix("/") {
+                    let components = input.split(separator: " ", maxSplits: 1)
+                    let command = String(components[0]).lowercased()
+                    let argument = components.count > 1 ? String(components[1]) : nil
+                    
+                    switch command {
+                    case "/quit":
+                        print("👋 Goodbye!")
+                        shouldQuit = true
+                        
+                    case "/name":
+                        if let name = argument {
+                            print("📝 Setting name to: '\(name)'")
+                            let reducer = SetNameReducer(userName: name)
+                            do {
+                                let requestId = try await client.callReducer(reducer)
+                                print("   Request sent (ID: \(requestId))")
+                            } catch {
+                                print("   ❌ Failed to set name: \(error)")
+                            }
+                        } else {
+                            print("⚠️  Usage: /name <your name>")
+                        }
+                        
+                    case "/help":
+                        print("\n📖 Available Commands:")
+                        print("   /quit - Exit the application")
+                        print("   /name <name> - Set your name")
+                        print("   /help - Show this help message")
+                        print("\nOr just type a message to send to the chat (coming soon!)\n")
+                        
+                    default:
+                        print("❓ Unknown command: \(command)")
+                        print("   Type /help for available commands")
+                    }
+                } else {
+                    // Regular message (for future implementation)
+                    print("💭 Message sending not yet implemented: \(input)")
+                }
+            }
+            
+            // Small delay to prevent CPU spinning
+            try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        }
+        
+        // Disconnect before exiting
+        await client.disconnect()
+    }
+    
     static func main() async {
         print("SpacetimeDB Quickstart Chat Client")
         print("==========================================")
@@ -60,6 +143,7 @@ struct QuickstartChat {
         
         // Check for command line arguments
         let args = CommandLine.arguments
+
         if args.contains("--clear-identity") {
             TokenStorage.clear()
             print("Identity cleared. A new identity will be created.\n")
@@ -82,21 +166,10 @@ struct QuickstartChat {
             print("Attempting to connect...")
             try await client.connect(token: savedToken, delegate: delegate)
 
-            print("\n📡 Waiting for server response...")
-            print("Auto-exit in 5 seconds...\n")
+            print("\n📡 Waiting for subscription to be applied...")
             
-            // Auto-exit after 5 seconds
-            let startTime = Date()
-            while Date().timeIntervalSince(startTime) < 5.0 {
-                try await Task.sleep(nanoseconds: 100_000_000) // Sleep for 0.1 seconds
-                
-                if await !client.connected {
-                    print("\n⚠️  Connection lost. Exiting...")
-                    break
-                }
-            }
-            
-            print("\n⏰ Auto-exit after 5 seconds")
+            // Start input loop (which will wait for subscription internally)
+            await startInputLoop(client: client, delegate: delegate)
 
         } catch {
             print("\n❌ Fatal Error: \(error)")
@@ -142,110 +215,5 @@ actor LocalDatabase {
     
     func getAllMessages() -> [MessageRow] {
         return messages
-    }
-}
-
-final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
-    private let database = LocalDatabase()
-    
-    func onIdentityReceived(client: SpacetimeDBClient, token: String, identity: String) async {
-        print("🆔 Identity received: \(String(identity.prefix(16)))...")
-        TokenStorage.save(token: token, identity: identity)
-    }
-    
-    func onSubscribeMultiApplied(client: SpacetimeDBClient, queryId: UInt32) {
-        print("✅ Query applied: \(queryId)")
-        Task {
-            let userCount = await database.getUserCount()
-            let messageCount = await database.getMessageCount()
-            print("📊 Database state: \(userCount) users, \(messageCount) messages")
-        }
-    }
-    
-    func onConnect(client: SpacetimeDBClient) async {
-        print("✅ Connected to SpacetimeDB!")
-        _ = try? await client.subscribeMulti(queries: ["SELECT * FROM user", "SELECT * FROM message"], queryId: 1)
-    }
-    
-    func onError(client: SpacetimeDBClient, error: any Error) async {
-        print("❌ Error: \(error)")
-    }
-    
-    func onDisconnect(client: SpacetimeDBClient) async {
-        print("🔌 Disconnected from SpacetimeDB")
-    }
-    
-    func onIncomingMessage(client: SpacetimeDBClient, message: Data) async {
-        print("📨 Received message (\(message.count) bytes)")
-        
-        if message.count > 0 {
-            print("   First byte: 0x\(String(format: "%02X", message[0]))")
-            
-            if message.count > 16 {
-                let preview = message.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " ")
-                print("   Preview: \(preview)...")
-            } else {
-                let hex = message.map { String(format: "%02X", $0) }.joined(separator: " ")
-                print("   Data: \(hex)")
-            }
-        }
-    }
-    
-    func onRowsInserted(client: SpacetimeDBClient, table: String, rows: [Any]) async {
-        print("➕ Inserting \(rows.count) rows into table '\(table)'")
-        
-        switch table {
-        case "user":
-            for row in rows {
-                if let user = row as? UserRow {
-                    await database.addUser(user)
-                    let displayName = user.name ?? "<unnamed>"
-                    let status = user.online ? "🟢" : "⚫"
-                    print("   👤 Added user: \(displayName) \(status)")
-                }
-            }
-        case "message":
-            for row in rows {
-                if let message = row as? MessageRow {
-                    await database.addMessage(message)
-                    print("   💬 Added message: \"\(message.text)\" at \(message.sent)")
-                }
-            }
-        default:
-            print("   ⚠️  Unknown table: \(table)")
-        }
-        
-        let userCount = await database.getUserCount()
-        let messageCount = await database.getMessageCount()
-        print("📊 Database now has \(userCount) users, \(messageCount) messages")
-    }
-    
-    func onRowsDeleted(client: SpacetimeDBClient, table: String, rows: [Any]) async {
-        print("➖ Deleting \(rows.count) rows from table '\(table)'")
-        
-        switch table {
-        case "user":
-            for row in rows {
-                if let user = row as? UserRow {
-                    await database.removeUser(user)
-                    let displayName = user.name ?? "<unnamed>"
-                    let status = user.online ? "🟢" : "⚫"
-                    print("   👤 Removed user: \(displayName) \(status)")
-                }
-            }
-        case "message":
-            for row in rows {
-                if let message = row as? MessageRow {
-                    await database.removeMessage(message)
-                    print("   💬 Removed message: \"\(message.text)\"")
-                }
-            }
-        default:
-            print("   ⚠️  Unknown table: \(table)")
-        }
-        
-        let userCount = await database.getUserCount()
-        let messageCount = await database.getMessageCount()
-        print("📊 Database now has \(userCount) users, \(messageCount) messages")
     }
 }

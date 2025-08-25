@@ -48,6 +48,16 @@ public class BSATNWriter {
         data.append(stringData)
     }
     
+    /// Write a string with UInt16 length prefix (for compatibility)
+    public func writeStringU16(_ value: String) throws {
+        guard let stringData = value.data(using: .utf8) else {
+            throw EncodingError.invalidValue(value, EncodingError.Context(codingPath: [], debugDescription: "Cannot encode string to UTF-8"))
+        }
+        
+        write(UInt16(stringData.count))
+        data.append(stringData)
+    }
+    
     /// Write an array with UInt32 count prefix
     public func writeArray(_ array: [AlgebraicValue], elementWriter: (AlgebraicValue) throws -> Void) throws {
         write(UInt32(array.count))
@@ -111,11 +121,11 @@ public class BSATNWriter {
         case .string(let s):
             try write(s)
         case .array(let a):
-            // For arrays, we need to know how to encode the elements
-            // This is a simplified implementation - in practice you'd have element writers
+            // Write array count and then each element
             write(UInt32(a.count))
-            // You would need to provide specific element writers for complete implementation
-            break
+            for element in a {
+                try writeAlgebraicValue(element)
+            }
         case .product(let p):
             // For products, write concatenated field values
             // This is a simplified implementation - in practice you'd have field writers
