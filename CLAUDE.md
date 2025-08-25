@@ -17,7 +17,7 @@ This is a Swift SDK for SpacetimeDB, a distributed database system. The SDK enab
 
 2. **WebSocket Protocol**: All communication uses binary WebSocket messages
    - Messages have a type byte followed by BSATN-encoded payload
-   - Client → Server and Server → Client message types are defined in `Sources/spacetimedb-swift-sdk/Tags.swift`
+   - Client → Server and Server → Client message types are defined in `Sources/SpacetimeDB/Tags.swift`
 
 3. **Table Row Decoders**: Tables require registered decoders before data can be received
    - Must implement `TableRowDecoder` protocol
@@ -46,12 +46,12 @@ swift build
 1. **Compression Support** (High Priority)
    - Implement Gzip decompression for `CompressibleQueryUpdate`
    - Implement Brotli decompression
-   - Files: `Sources/spacetimedb-swift-sdk/Server Messages/CompressibleQueryUpdate.swift`
+   - Files: `Sources/SpacetimeDB/Server Messages/CompressibleQueryUpdate.swift`
 
 2. **Reconnection Logic** (High Priority)
    - Add automatic reconnection with exponential backoff
    - Maintain subscription state across reconnections
-   - File: `Sources/spacetimedb-swift-sdk/SpacetimeDBClient.swift`
+   - File: `Sources/SpacetimeDB/SpacetimeDBClient.swift`
 
 3. **Missing Protocol Features** (Medium Priority)
    - Implement Unsubscribe functionality
@@ -74,6 +74,7 @@ swift build
 
 ### Development Guidelines
 
+- **Import Statements**: Use `import SpacetimeDB` and `import BSATN` (note the Swift-style naming)
 - **Error Handling**: Use descriptive error messages and proper error types from `SpacetimeDBErrors.swift`
 - **Async/Await**: All network operations should use Swift's async/await patterns
 - **Delegate Pattern**: Client notifications go through `SpacetimeDBClientDelegate`

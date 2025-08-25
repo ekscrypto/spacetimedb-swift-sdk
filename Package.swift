@@ -12,8 +12,8 @@ let package = Package(
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
-            name: "spacetimedb-swift-sdk",
-            targets: ["spacetimedb-swift-sdk"]),
+            name: "SpacetimeDB",
+            targets: ["SpacetimeDB"]),
         .library(
             name: "BSATN",
             targets: ["BSATN"]),
@@ -27,17 +27,17 @@ let package = Package(
         .target(
             name: "BSATN"),
         .target(
-            name: "spacetimedb-swift-sdk",
+            name: "SpacetimeDB",
             dependencies: ["BSATN"]),
         .executableTarget(
             name: "quickstart-chat",
-            dependencies: ["spacetimedb-swift-sdk", "BSATN"],
+            dependencies: ["SpacetimeDB", "BSATN"],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"])
             ]),
         .testTarget(
-            name: "spacetimedb-swift-sdkTests",
-            dependencies: ["spacetimedb-swift-sdk"]
+            name: "SpacetimeDBTests",
+            dependencies: ["SpacetimeDB"]
         ),
         .testTarget(
             name: "BSATNTests",

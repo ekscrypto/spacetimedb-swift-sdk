@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import spacetimedb_swift_sdk
+import SpacetimeDB
 import BSATN
 
 /// Reducer for setting a user's name in the quickstart-chat database

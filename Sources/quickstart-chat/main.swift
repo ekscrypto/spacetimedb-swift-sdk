@@ -1,5 +1,5 @@
 import Foundation
-import spacetimedb_swift_sdk
+import SpacetimeDB
 import BSATN
 
 extension Data {

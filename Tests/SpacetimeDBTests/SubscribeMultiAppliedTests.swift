@@ -1,5 +1,5 @@
 import XCTest
-@testable import spacetimedb_swift_sdk
+@testable import SpacetimeDB
 @testable import BSATN
 
 final class SubscribeMultiAppliedTests: XCTestCase {

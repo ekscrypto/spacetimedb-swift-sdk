@@ -7,7 +7,7 @@
 
 import Foundation
 import BSATN
-import spacetimedb_swift_sdk
+import SpacetimeDB
 
 /// Represents a user row from the user table
 struct UserRow {

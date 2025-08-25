@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import spacetimedb_swift_sdk
+import SpacetimeDB
 import BSATN
 
 /// Reducer for sending a message in the quickstart-chat database

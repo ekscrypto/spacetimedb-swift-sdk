@@ -61,6 +61,9 @@ For comparison and reference, see the official SpacetimeDB quickstart tutorials:
 
 ### Establishing a connection
 ```swift
+import SpacetimeDB
+import BSATN
+
 let client = SpacetimeDBClient(
   host: "http://localhost:3000", 
   db: "quickstart-chat")
@@ -75,6 +78,8 @@ let connectionId = try await client.connect(token: savedToken, delegate: myDeleg
 
 ### Subscribing to tables
 ```swift
+import SpacetimeDB
+
 // Subscribe to multiple tables
 try await client.subscribeMulti(
     queries: ["SELECT * FROM user", "SELECT * FROM message"], 
@@ -84,6 +89,9 @@ try await client.subscribeMulti(
 
 ### Calling reducers
 ```swift
+import SpacetimeDB
+import BSATN
+
 // Define a reducer
 struct SetNameReducer: Reducer {
     let name = "set_name"

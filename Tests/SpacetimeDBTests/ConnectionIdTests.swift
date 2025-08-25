@@ -1,6 +1,6 @@
 //import Testing
 //import Foundation
-//@testable import spacetimedb_swift_sdk
+//@testable import SpacetimeDB
 //
 //@Test func codable() throws {
 //    let connectionId = ConnectionId()

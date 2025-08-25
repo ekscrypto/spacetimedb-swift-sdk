@@ -7,7 +7,7 @@
 
 import Foundation
 import BSATN
-import spacetimedb_swift_sdk
+import SpacetimeDB
 
 /// Represents a message row from the message table
 struct MessageRow {

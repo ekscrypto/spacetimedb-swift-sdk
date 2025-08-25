@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import spacetimedb_swift_sdk
+import SpacetimeDB
 import BSATN
 
 final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
