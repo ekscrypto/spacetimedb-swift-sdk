@@ -99,6 +99,115 @@ let reducer = SetNameReducer(userName: "Alice")
 let requestId = try await client.callReducer(reducer)
 ```
 
+## SDK Implementation Status
+
+### BSATN Data Types Support
+
+#### ✅ Fully Supported Types
+- **Integers**: UInt8, UInt16, UInt32, UInt64, UInt128, UInt256, Int8, Int16, Int32, Int64, Int128, Int256
+- **Floating Point**: Float32 (Float), Float64 (Double)
+- **Boolean**: Bool
+- **Strings**: String (UTF-8)
+- **Binary**: Data (byte arrays)
+- **Collections**: Array<T>, Dictionary<K,V>
+- **Optional**: Optional<T>
+- **Custom Types**: Product types (structs), Sum types (enums with associated values)
+
+#### ⚠️ Partially Supported
+- **Tuples**: Basic support, may need testing with complex nested tuples
+
+#### ❌ Not Yet Implemented
+- **Maps with non-String keys**: Currently only String keys are fully tested
+
+### SpacetimeDB Protocol Support
+
+#### Client → Server Messages
+
+##### ✅ Implemented
+- **Subscribe**: Subscribe to SQL queries
+- **SubscribeMulti**: Subscribe to multiple SQL queries in one request
+- **CallReducer**: Call server-side reducer functions with BSATN-encoded arguments
+- **ConnectionInit**: Initial connection setup with authentication
+
+##### ❌ Not Implemented
+- **Unsubscribe**: Remove existing subscriptions
+- **RegisterTimer**: Schedule recurring operations
+- **OneOffQuery**: Execute single queries without subscription
+
+#### Server → Client Messages
+
+##### ✅ Implemented
+- **IdentityToken**: Receive authentication token and identity
+- **SubscribeMultiApplied**: Confirmation of multi-query subscription
+- **TransactionUpdate**: Database changes from reducer execution
+  - TableUpdate: Row insertions and deletions
+  - DatabaseUpdate: Batch of table updates
+  - ReducerCallResponse: Reducer execution status and energy usage
+- **QueryUpdate**: Initial data and updates for subscribed queries
+- **CompressibleQueryUpdate**: Wrapper for compression support (parsing only)
+
+##### ⚠️ Partially Implemented
+- **SubscribeApplied**: Single subscription confirmation (untested)
+- **UnsubscribeApplied**: Unsubscription confirmation (untested)
+
+##### ❌ Not Implemented
+- **OneOffQueryResponse**: Response to one-off queries
+- **Event**: Server-side event notifications
+
+### Compression Support
+
+- ✅ **Uncompressed**: Full support for uncompressed messages
+- ❌ **Gzip**: Parsing structure exists but decompression not implemented
+- ❌ **Brotli**: Parsing structure exists but decompression not implemented
+
+### WebSocket Features
+
+- ✅ **Connection Management**: Connect, disconnect, reconnect
+- ✅ **Authentication**: Token-based authentication with persistence
+- ✅ **Binary Message Protocol**: BSATN encoding/decoding
+- ✅ **Error Handling**: Connection errors, parsing errors, reducer errors
+- ❌ **Automatic Reconnection**: Manual reconnection required
+- ❌ **Connection Heartbeat**: No keepalive mechanism
+
+### Delegate Callbacks
+
+##### ✅ Implemented
+- `onConnect`: Connection established
+- `onDisconnect`: Connection lost
+- `onIdentityReceived`: Authentication completed
+- `onError`: Error occurred
+- `onIncomingMessage`: Raw message received (for debugging)
+- `onTableUpdate`: Database table changes with batched updates
+- `onReducerResponse`: Reducer execution results
+- `onSubscribeMultiApplied`: Multi-subscription ready
+
+##### ❌ Not Implemented
+- `onEvent`: Server event notifications
+- `onOneOffQueryResult`: Query result callbacks
+
+### Known Limitations
+
+1. **Compression**: Only uncompressed messages are supported. Gzip and Brotli compression are recognized but not decompressed.
+2. **Large Messages**: No streaming support for very large messages
+3. **Reconnection**: No automatic reconnection logic
+4. **Subscription Management**: Cannot unsubscribe from queries
+5. **Timers**: No support for server-side scheduled operations
+6. **Non-String Map Keys**: Maps/Dictionaries with non-String keys need more testing
+
+### Roadmap / TODO
+
+- [ ] Implement Gzip decompression
+- [ ] Implement Brotli decompression  
+- [ ] Add automatic reconnection with exponential backoff
+- [ ] Implement unsubscribe functionality
+- [ ] Add one-off query support
+- [ ] Implement server event handling
+- [ ] Add connection heartbeat/keepalive
+- [ ] Support for timer registration
+- [ ] Comprehensive unit tests for all BSATN types
+- [ ] Performance optimizations for large datasets
+- [ ] SwiftUI property wrappers for reactive updates
+
 ## Lessons learned
 
 * SATS-JSON supports 128-bit and 256-bit integer values which aren't supported by JSONDecoder and JSONSerialization.
