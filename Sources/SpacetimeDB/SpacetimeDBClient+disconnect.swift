@@ -9,7 +9,12 @@ import Foundation
 
 extension SpacetimeDBClient {
     /// Disconnect from the SpacetimeDB server
-    public func disconnect() async {
+    public func disconnect(stopAutoReconnect: Bool = true) async {
+        // Stop auto-reconnect if requested (default is to stop)
+        if stopAutoReconnect {
+            self.stopAutoReconnect()
+        }
+        
         if let task = webSocketTask {
             task.cancel(with: .goingAway, reason: nil)
             webSocketTask = nil

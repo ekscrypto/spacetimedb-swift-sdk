@@ -11,12 +11,18 @@ extension SpacetimeDBClient {
     /// Connect to the server
     public func connect(
         token: AuthenticationToken? = nil,
-        timeout: TimeInterval = 5.0,
-        delegate clientDelegate: SpacetimeDBClientDelegate
+        timeout: TimeInterval = 10.0,
+        delegate clientDelegate: SpacetimeDBClientDelegate,
+        enableAutoReconnect: Bool = true
     ) throws {
         guard webSocketTask == nil else {
             throw Errors.alreadyConnected
         }
+        
+        // Store for reconnection
+        self.lastToken = token
+        self.shouldReconnect = enableAutoReconnect
+        self.reconnectAttempts = 0
         
         // Validate compression support before attempting connection
         switch compression {

@@ -15,6 +15,10 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
     private var userNameCache: [UInt256: String?] = [:]  // Track user names for change detection
     private var myIdentity: UInt256? = nil
     private var subscriptionReady: Bool = false
+    
+    func onReconnecting(client: SpacetimeDBClient, attempt: Int) async {
+        print("\n🔄 Attempting to reconnect... (attempt \(attempt)/10)")
+    }
 
     func onIdentityReceived(client: SpacetimeDBClient, token: String, identity: UInt256) async {
         print("🆔 Identity received: \(identity.description)...")
@@ -70,16 +74,22 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
     }
     
     func onConnect(client: SpacetimeDBClient) async {
-        print("✅ Connected to SpacetimeDB!")
+        print("\n✅ Connected to SpacetimeDB!")
+        subscriptionReady = false  // Reset subscription state on reconnect
+        
+        // Clear the local database to avoid duplicates when resubscribing
+        await database.clear()
+        
         _ = try? await client.subscribeMulti(queries: ["SELECT * FROM user", "SELECT * FROM message"], queryId: 1)
     }
     
     func onError(client: SpacetimeDBClient, error: any Error) async {
-        print("❌ Error: \(error)")
+        print("\n❌ Error: \(error)")
     }
     
     func onDisconnect(client: SpacetimeDBClient) async {
-        print("🔌 Disconnected from SpacetimeDB")
+        print("\n⚠️  Connection lost! Will attempt to reconnect automatically...")
+        subscriptionReady = false
     }
     
     func onIncomingMessage(client: SpacetimeDBClient, message: Data) async {

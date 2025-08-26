@@ -42,6 +42,8 @@ The Swift chat client implements all core features from the official tutorials, 
 - 🎯 **User listing** - `/users` command shows all online users
 - 🎯 **Subscription readiness** - Waits for data sync before accepting commands
 - 🎯 **Token persistence** - Maintains identity across sessions (use `--clear-identity` to reset)
+- 🎯 **Automatic reconnection** - Reconnects with exponential backoff on connection loss
+- 🎯 **Debug mode** - Enable detailed logging with `--debug` flag
 
 #### Available Commands
 - `/help` - Show available commands
@@ -75,8 +77,13 @@ let client = try SpacetimeDBClient(
 await client.registerTableRowDecoder(table: "user", decoder: UserRowDecoder())
 await client.registerTableRowDecoder(table: "message", decoder: MessageRowDecoder())
 
-// Connect with optional saved token
-try await client.connect(token: savedToken, delegate: myDelegate)
+// Connect with optional saved token and automatic reconnection
+try await client.connect(
+    token: savedToken,
+    timeout: 10.0,  // Connection timeout in seconds
+    delegate: myDelegate,
+    enableAutoReconnect: true  // Enable automatic reconnection (default)
+)
 ```
 
 ### Subscribing to tables
@@ -177,8 +184,8 @@ let requestId = try await client.callReducer(reducer)
 - ✅ **Authentication**: Token-based authentication with persistence
 - ✅ **Binary Message Protocol**: BSATN encoding/decoding
 - ✅ **Error Handling**: Connection errors, parsing errors, reducer errors
-- ❌ **Automatic Reconnection**: Manual reconnection required
-- ❌ **Connection Heartbeat**: No keepalive mechanism
+- ✅ **Automatic Reconnection**: Exponential backoff with configurable max attempts
+- ✅ **Connection Heartbeat**: Native WebSocket ping/pong via URLSessionWebSocketTask
 
 ### Delegate Callbacks
 
@@ -191,6 +198,7 @@ let requestId = try await client.callReducer(reducer)
 - `onTableUpdate`: Database table changes with batched updates
 - `onReducerResponse`: Reducer execution results
 - `onSubscribeMultiApplied`: Multi-subscription ready
+- `onReconnecting`: Reconnection attempt in progress
 
 ##### ❌ Not Implemented
 - `onEvent`: Server event notifications
@@ -200,20 +208,20 @@ let requestId = try await client.callReducer(reducer)
 
 1. **Gzip Compression**: Gzip compression is not supported (Brotli and uncompressed work)
 2. **Large Messages**: No streaming support for very large messages
-3. **Reconnection**: No automatic reconnection logic
-4. **Subscription Management**: Cannot unsubscribe from queries
-5. **Timers**: No support for server-side scheduled operations
-6. **Non-String Map Keys**: Maps/Dictionaries with non-String keys need more testing
+3. **Subscription Management**: Cannot unsubscribe from queries
+4. **Timers**: No support for server-side scheduled operations
+5. **Non-String Map Keys**: Maps/Dictionaries with non-String keys need more testing
 
 ### Roadmap / TODO
 
 - [ ] Implement Gzip decompression
 - [x] ~~Implement Brotli decompression~~ ✅ Completed
-- [ ] Add automatic reconnection with exponential backoff
+- [x] ~~Add automatic reconnection with exponential backoff~~ ✅ Completed
+- [x] ~~Add debug mode for detailed logging~~ ✅ Completed
+- [x] ~~Add connection heartbeat/keepalive~~ ✅ Completed (native URLSessionWebSocketTask support)
 - [ ] Implement unsubscribe functionality
 - [ ] Add one-off query support
 - [ ] Implement server event handling
-- [ ] Add connection heartbeat/keepalive
 - [ ] Support for timer registration
 - [ ] Comprehensive unit tests for all BSATN types
 - [ ] Performance optimizations for large datasets

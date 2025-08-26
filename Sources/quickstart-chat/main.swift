@@ -247,4 +247,9 @@ actor LocalDatabase {
     func getAllMessages() -> [MessageRow] {
         return messages
     }
+    
+    func clear() {
+        users.removeAll()
+        messages.removeAll()
+    }
 }

@@ -12,6 +12,7 @@ public protocol SpacetimeDBClientDelegate: AnyObject, Sendable {
     func onConnect(client: SpacetimeDBClient) async
     func onError(client: SpacetimeDBClient, error: any Error) async
     func onDisconnect(client: SpacetimeDBClient) async
+    func onReconnecting(client: SpacetimeDBClient, attempt: Int) async
     func onIncomingMessage(client: SpacetimeDBClient, message: Data) async
     func onSubscribeMultiApplied(client: SpacetimeDBClient, queryId: UInt32)
     func onIdentityReceived(client: SpacetimeDBClient, token: String, identity: BSATN.UInt256) async

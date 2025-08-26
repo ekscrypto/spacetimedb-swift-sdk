@@ -22,8 +22,17 @@ extension SpacetimeDBClient {
         webSocketTask = nil
 
         let clientDelegate = self.clientDelegate
-        self.clientDelegate = nil
+        
+        // Don't clear the delegate if we're going to reconnect
+        if !shouldReconnect {
+            self.clientDelegate = nil
+        }
 
         await clientDelegate?.onDisconnect(client: self)
+        
+        // Start reconnection if enabled
+        if shouldReconnect {
+            startReconnection()
+        }
     }
 }
