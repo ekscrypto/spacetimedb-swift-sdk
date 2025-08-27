@@ -65,18 +65,13 @@ The SDK automatically handles both protocol-level compression (entire messages) 
 
 ### Priority Roadmap Items
 
-1. **Reconnection Logic** (High Priority)
-   - Add automatic reconnection with exponential backoff
-   - Maintain subscription state across reconnections
-   - File: `Sources/SpacetimeDB/SpacetimeDBClient.swift`
-
-3. **Missing Protocol Features** (Medium Priority)
+1. **Missing Protocol Features** (Medium Priority)
    - Implement Unsubscribe functionality
    - Add OneOffQuery support
    - Implement server Event handling
    - Files: Check `Tags.swift` for message types
 
-4. **Testing & Documentation** (Ongoing)
+2. **Testing & Documentation** (Ongoing)
    - Add unit tests for all BSATN types
    - Create integration tests for protocol messages
    - Add code documentation with examples
@@ -169,17 +164,3 @@ The SDK currently has limited test coverage (~20-30%). Major gaps include:
 - **Error handling** - SpacetimeDBErrors scenarios
 
 Priority should be given to testing Int256, server message parsing, and the connection lifecycle as these are critical for SDK reliability.
-
-## For Contributors
-
-Before implementing new features:
-1. Check the README.md "SDK Implementation Status" section
-2. Review existing code patterns in similar files
-3. Test with the quickstart-chat application
-4. Update README.md status section after implementing features
-
-## Questions or Issues?
-
-- This is a community project, not officially supported by Clockwork Labs
-- SpacetimeDB documentation: https://spacetimedb.com/docs
-- Review the Rust/TypeScript SDKs for reference implementation details
