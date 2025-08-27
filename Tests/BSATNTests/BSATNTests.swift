@@ -230,7 +230,7 @@ final class BSATNTests: XCTestCase {
         struct UserLike: ProductModel {
             var definition: [AlgebraicValueType] { [
                 .uint256,
-                .sum(OptionModel(String.self)),
+                .sum(OptionModel(.string)),
                 .bool
             ]}
         }
@@ -562,9 +562,9 @@ final class BSATNTests: XCTestCase {
         // Note: The current BSATNReader implementation assumes sum types with tag 0 contain string data
         struct MultiOptionalProduct: ProductModel {
             var definition: [AlgebraicValueType] { [
-                .sum(OptionModel(String.self)),
-                .sum(OptionModel(String.self)),
-                .sum(OptionModel(String.self))
+                .sum(OptionModel(.string)),
+                .sum(OptionModel(.string)),
+                .sum(OptionModel(.string))
             ]}
         }
         

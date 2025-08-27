@@ -154,42 +154,59 @@ public class BSATNReader {
                 values.append(try readAlgebraicValue(as: field))
             }
             return .product(values)
-        case .sum(_):
+        case .sum(let model):
             // Read the tag
             let tag: UInt8 = try read()
             
-            // For sum types, we need to capture the raw bytes of the variant data
-            // Since we don't know the structure, we need context-specific handling
-            // For optional types: tag 0 = Some (has data), tag 1 = None (no data)
-            
-            // Save current position
+            // Save current position for reading variant data
             let startOffset = offset
             
-            // Try to determine how much data to read based on tag
-            // This is a heuristic approach for optional string types
-            if tag == 1 {
-                // None variant - no data
-                return .sum(tag: tag, value: Data())
-            } else {
-                // Some variant or other - need to capture the variant's data
-                // For optional string, the data should be a string
-                // Try to read it as a string and capture the raw bytes
-                do {
-                    // Capture the starting position
-                    let startPos = offset
-                    // Read string length (UInt32 = 4 bytes)
-                    let length: UInt32 = try read()
-                    // Total size: 4 bytes (UInt32 length) + string bytes
-                    let totalSize = 4 + Int(length)
-                    
-                    // Reset to start and read all bytes at once
-                    offset = startPos
-                    let rawData = try readBytes(totalSize)
-                    return .sum(tag: tag, value: Data(rawData))
-                } catch {
-                    // If reading as string fails, reset and return empty
-                    offset = startOffset
+            // Check if this is an Option type
+            if let optionModel = model as? OptionModel {
+                // Option type: tag 0 = Some, tag 1 = None
+                if tag == 1 {
+                    // None variant - no data
                     return .sum(tag: tag, value: Data())
+                } else if tag == 0 {
+                    // Some variant - recursively read the wrapped type
+                    do {
+                        // Read the wrapped value using its type definition
+                        _ = try readAlgebraicValue(as: optionModel.wrappedType)
+                        
+                        // Calculate how much data was read
+                        let endOffset = offset
+                        offset = startOffset
+                        let rawData = try readBytes(endOffset - startOffset)
+                        
+                        return .sum(tag: tag, value: Data(rawData))
+                    } catch {
+                        // If reading fails, reset and return empty
+                        offset = startOffset
+                        return .sum(tag: tag, value: Data())
+                    }
+                } else {
+                    // Unknown tag for Option type
+                    return .sum(tag: tag, value: Data())
+                }
+            } else {
+                // For non-Option sum types, we don't have enough model information
+                // This is a limitation that should be addressed with proper variant models
+                // For now, attempt to read as string if tag is 0, otherwise return empty
+                if tag == 1 {
+                    // Assume None-like variant with no data
+                    return .sum(tag: tag, value: Data())
+                } else {
+                    // Try to read as string (current heuristic for backwards compatibility)
+                    do {
+                        let length: UInt32 = try read()
+                        let totalSize = 4 + Int(length)
+                        offset = startOffset
+                        let rawData = try readBytes(totalSize)
+                        return .sum(tag: tag, value: Data(rawData))
+                    } catch {
+                        offset = startOffset
+                        return .sum(tag: tag, value: Data())
+                    }
                 }
             }
         }

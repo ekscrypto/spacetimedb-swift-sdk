@@ -55,7 +55,7 @@ When converting from Rust to Swift, use these type mappings:
 | `String` | `String` | `.string` |
 | `Vec<u8>` | `Data` | `.bytes` |
 | `Vec<T>` | `[T]` | `.array(elementType)` |
-| `Option<T>` | `T?` | `.sum(OptionModel(T))` |
+| `Option<T>` | `T?` | `.sum(OptionModel(.typeOfT))` |
 | `struct` | `struct` | `.product(fields)` |
 
 ### Important: Option Types
