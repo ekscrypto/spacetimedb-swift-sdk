@@ -18,6 +18,9 @@ final class SubscribeMultiAppliedTests: XCTestCase {
         // Write request ID
         writer.write(UInt32(1))
         
+        // Write execution duration
+        writer.write(UInt64(1000))  // 1000 microseconds
+        
         // Write query ID  
         writer.write(UInt32(0))
         

@@ -4,6 +4,13 @@ public struct UInt256: Equatable, Hashable, CustomStringConvertible, Sendable, C
     public let u2: UInt64
     public let u3: UInt64
     
+    public init(u0: UInt64, u1: UInt64, u2: UInt64, u3: UInt64) {
+        self.u0 = u0
+        self.u1 = u1
+        self.u2 = u2
+        self.u3 = u3
+    }
+    
     public var description: String {
         let hex0 = String(format: "%016llx", u0)
         let hex1 = String(format: "%016llx", u1)

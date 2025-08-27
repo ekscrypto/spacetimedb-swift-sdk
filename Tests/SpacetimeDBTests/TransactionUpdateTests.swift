@@ -96,10 +96,9 @@ final class TransactionUpdateTests: XCTestCase {
         // Check the inserted row data
         if let insertedRow = queryUpdate.inserts.rows.first {
             print("Inserted row size: \(insertedRow.count) bytes")
-            // The actual server bytes show the row data is 0 bytes
-            // This appears to be expected - the actual row data might be stored elsewhere
-            // or this could be a placeholder for a row that was inserted
-            XCTAssertEqual(insertedRow.count, 0, "Expected empty row data based on actual server bytes")
+            // The actual server bytes contain 67 bytes of row data
+            // This is the MessageRow data that was inserted
+            XCTAssertEqual(insertedRow.count, 67, "Expected 67 bytes of row data for the inserted message")
         }
         
         print("✅ Successfully parsed TransactionUpdate from real server bytes!")
