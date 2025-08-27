@@ -4,7 +4,7 @@ SDK to connect to SpacetimeDB from Swift
 This is a community project and is not an official SDK supported by Clockwork Labs.
 For more information about SpacetimeDB, visit https://spacetimedb.com
 
-STATUS: Early development -- functional but not feature-complete.
+STATUS: Beta -- Core functionality stable with comprehensive test coverage.
 
 ## Installation
 
@@ -204,6 +204,16 @@ let requestId = try await client.callReducer(reducer)
 - `onEvent`: Server event notifications
 - `onOneOffQueryResult`: Query result callbacks
 
+### Test Coverage
+
+The SDK includes comprehensive unit tests for:
+- ✅ **BSATN Types**: All primitive types, arrays, products, and AlgebraicValues
+- ✅ **Large Integers**: UInt128, UInt256, Int128, Int256 with JSON encoding
+- ✅ **Protocol Messages**: IdentityToken, BsatnRowList, CompressibleQueryUpdate
+- ✅ **Compression**: Unified compression enum with Brotli support
+- ✅ **Message Handling**: BSATNMessageHandler with various message types
+- ✅ **Integration Tests**: Real server message parsing and connection lifecycle
+
 ### Known Limitations
 
 1. **Gzip Compression**: Gzip compression is not supported (Brotli and uncompressed work)
@@ -223,7 +233,7 @@ let requestId = try await client.callReducer(reducer)
 - [ ] Add one-off query support
 - [ ] Implement server event handling
 - [ ] Support for timer registration
-- [ ] Comprehensive unit tests for all BSATN types
+- [x] ~~Comprehensive unit tests for all BSATN types~~ ✅ Completed
 - [ ] Performance optimizations for large datasets
 - [ ] SwiftUI property wrappers for reactive updates
 

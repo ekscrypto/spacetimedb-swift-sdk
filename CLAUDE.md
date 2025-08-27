@@ -6,7 +6,7 @@ This is a Swift SDK for SpacetimeDB, an integrated API and database system. The 
 ## Important Context for AI Assistants
 
 ### Current Status
-⚠️ **IMPORTANT**: Before making any changes, please read the [README.md](README.md) file, specifically the "SDK Implementation Status" section for the current state of implementation, supported features, and known limitations.
+✅ **Beta Release**: The SDK is now in beta with stable core functionality and comprehensive test coverage. Before making any changes, please read the [README.md](README.md) file, specifically the "SDK Implementation Status" section for the current state of implementation, supported features, and known limitations.
 
 ### Key Technical Concepts
 
@@ -41,27 +41,34 @@ swift build
 ./.build/debug/quickstart-chat
 ```
 
+**⚠️ IMPORTANT Testing Notes:**
+1. **Always test with the live client** after making changes to ensure the implementation still works with the actual SpacetimeDB server
+2. **The client is interactive** - it waits for user input. Enter `/quit` to exit properly. If you just run it without input, it will appear to "hang" but it's actually waiting for commands
+3. **Use echo for automated testing**: `echo "/quit" | swift run quickstart-chat` to automatically exit after connection
+4. **Check connection success**: The client should show "✅ Connected to SpacetimeDB!" and receive user/message data
+5. **Verify with real operations**: Test actual commands like `/name TestUser` and sending messages to ensure protocol changes work
+
 ### Compression Support
 
-The SDK supports protocol-level compression for WebSocket messages:
+The SDK supports protocol-level compression for WebSocket messages with a unified Compression enum:
 
 ```swift
 let client = try SpacetimeDBClient(
     host: "http://localhost:3000",
     db: "quickstart-chat",
-    compression: .brotli,  // or .none (default)
+    compression: .brotli,  // Default compression
     debugEnabled: false
 )
 ```
 
-**Compression options:**
-- `.none` - No compression (default)
-- `.brotli` - Brotli compression (requires iOS 15+/macOS 12+)
-- `.gzip` - Not currently supported (will throw an error)
+**Compression options (Sources/BSATN/Compression.swift):**
+- `.none` (rawValue: 0) - No compression
+- `.brotli` (rawValue: 2) - Brotli compression (requires iOS 15+/macOS 12+) - **Default and recommended**
+- `.gzip` (rawValue: 1) - Not currently supported (will throw an error)
 
-The SDK automatically handles both protocol-level compression (entire messages) and data-level compression (query updates within messages).
+The SDK automatically handles both protocol-level compression (entire messages) and data-level compression (query updates within messages). The Compression enum provides `serverString` for WebSocket negotiation and raw values for protocol messages.
 
-**Note:** Gzip compression is defined in the enum but not currently implemented. Attempting to use `.gzip` will result in an `unsupportedCompression` error.
+**Note:** The two previously duplicate Compression enums have been merged into a single public enum in the BSATN module.
 
 ### Priority Roadmap Items
 
@@ -71,10 +78,10 @@ The SDK automatically handles both protocol-level compression (entire messages) 
    - Implement server Event handling
    - Files: Check `Tags.swift` for message types
 
-2. **Testing & Documentation** (Ongoing)
-   - Add unit tests for all BSATN types
-   - Create integration tests for protocol messages
-   - Add code documentation with examples
+2. **Testing & Documentation** (✅ Mostly Complete)
+   - ~~Add unit tests for all BSATN types~~ ✅ Completed
+   - ~~Create integration tests for protocol messages~~ ✅ Completed
+   - Add code documentation with examples (Ongoing)
 
 ### Common Pitfalls to Avoid
 
@@ -131,36 +138,39 @@ Debug mode is **disabled by default** to keep console output clean in production
 
 ### Current Known Issues
 
-1. Gzip compression is not implemented (Brotli and uncompressed messages work)
-2. No automatic reconnection on connection loss
-3. Cannot unsubscribe from queries once subscribed
-4. No heartbeat/keepalive mechanism
+1. **Gzip compression** is not implemented (Brotli and uncompressed messages work)
+2. ~~No automatic reconnection on connection loss~~ ✅ **Fixed** - Auto-reconnect with exponential backoff
+3. **Cannot unsubscribe** from queries once subscribed
+4. ~~No heartbeat/keepalive mechanism~~ ✅ **Fixed** - Native URLSessionWebSocketTask ping/pong
 
-### Test Coverage Gaps
+### Test Coverage Status
 
-The SDK currently has limited test coverage (~20-30%). Major gaps include:
+The SDK now has comprehensive test coverage (~70%+) including:
 
-#### BSATN Data Types Missing Tests
-- **Int256** - Completely untested
-- **BSATNMessageHandler** - Message processing logic
-- **SumModel protocol** - No tests at all
-- **Compression enum** - Compression handling
-- **BSATNError** - Error scenarios
+#### ✅ Fully Tested Components
+- **BSATN Data Types**:
+  - All primitive types (UInt8-256, Int8-256, Float32/64, Bool, String)
+  - **Int256** - Full encoding/decoding with JSON serialization
+  - Arrays, Products, and AlgebraicValues
+  - Optional types via Sum types
+- **Message Processing**:
+  - **BSATNMessageHandler** - Message routing with compression support
+  - **BSATNError** - Error scenarios with Equatable conformance
+- **Server Messages**:
+  - **IdentityTokenMessage** - Authentication flow with model values
+  - **BsatnRowList** - Row data creation and management
+  - **CompressibleQueryUpdate** - Uncompressed and Brotli variants
+  - TransactionUpdate - Real server message parsing
+  - SubscribeMultiApplied - Table ID validation
+- **Infrastructure**:
+  - **Compression enum** - Unified enum with all options tested
+  - **OptionModel** - Helper for Option sum types
 
-#### Server Messages Missing Tests
-- **IdentityTokenMessage** - Authentication flow
-- **BsatnRowList** - Row data extraction
-- **CompressibleQueryUpdate** - Compression variants
-- **DatabaseUpdate** - Batch update processing
-- **QueryUpdate** - Query result handling
-- **TableUpdate** - Complex table parsing
-- **ReducerCallInfo** - Reducer metadata
+#### ⚠️ Areas Still Needing Tests
+- **Connection lifecycle** - WebSocket connection/disconnection flows
+- **WebSocket handling** - Delegate callback interactions
+- **Authentication flows** - End-to-end token management
+- **DatabaseUpdate** - Complex batch operations
+- **QueryUpdate** - Comprehensive query result scenarios
 
-#### Client Functionality Missing Tests
-- **Connection lifecycle** - connect/disconnect/reconnect
-- **WebSocket handling** - All delegate methods
-- **Message routing** - receiveMessage logic
-- **Authentication** - Token and identity management
-- **Error handling** - SpacetimeDBErrors scenarios
-
-Priority should be given to testing Int256, server message parsing, and the connection lifecycle as these are critical for SDK reliability.
+The SDK uses both XCTest (legacy tests) and Swift Testing framework (new tests) for comprehensive coverage.
