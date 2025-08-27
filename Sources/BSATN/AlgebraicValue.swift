@@ -20,5 +20,5 @@ public indirect enum AlgebraicValue: Equatable {
     case string(String)
     case array([AlgebraicValue])
     case product([AlgebraicValue])
-    case sum(tag: UInt8, value: Data)
+    case sum(tag: UInt8, value: AlgebraicValue?)
 }

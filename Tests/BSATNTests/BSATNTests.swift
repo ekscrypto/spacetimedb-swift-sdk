@@ -241,11 +241,7 @@ final class BSATNTests: XCTestCase {
         let writer1 = BSATNWriter()
         try writer1.writeAlgebraicValue(.product([
             .uint256(identity),
-            .sum(tag: 0, value: {
-                let w = BSATNWriter()
-                try! w.write("Alice")
-                return w.finalize()
-            }()),
+            .sum(tag: 0, value: .string("Alice")),
             .bool(true)
         ]))
         let data1 = writer1.finalize()
@@ -259,20 +255,23 @@ final class BSATNTests: XCTestCase {
         }
         
         XCTAssertEqual(fields1[0], .uint256(identity))
-        guard case .sum(let tag1, let nameData1) = fields1[1] else {
+        guard case .sum(let tag1, let nameValue1) = fields1[1] else {
             XCTFail("Expected sum for optional")
             return
         }
         XCTAssertEqual(tag1, 0) // Some
-        let nameReader = BSATNReader(data: nameData1)
-        XCTAssertEqual(try nameReader.readString(), "Alice")
+        guard let nameValue1 = nameValue1, case .string(let name1) = nameValue1 else {
+            XCTFail("Expected string value for Some variant")
+            return
+        }
+        XCTAssertEqual(name1, "Alice")
         XCTAssertEqual(fields1[2], .bool(true))
         
         // Test with None
         let writer2 = BSATNWriter()
         try writer2.writeAlgebraicValue(.product([
             .uint256(identity),
-            .sum(tag: 1, value: Data()), // None
+            .sum(tag: 1, value: nil), // None
             .bool(false)
         ]))
         let data2 = writer2.finalize()
@@ -285,12 +284,12 @@ final class BSATNTests: XCTestCase {
             return
         }
         
-        guard case .sum(let tag2, let nameData2) = fields2[1] else {
+        guard case .sum(let tag2, let nameValue2) = fields2[1] else {
             XCTFail("Expected sum for optional")
             return
         }
         XCTAssertEqual(tag2, 1) // None
-        XCTAssertEqual(nameData2.count, 0)
+        XCTAssertNil(nameValue2)
     }
     
     func testMessageRowRoundTrip() throws {
@@ -569,17 +568,13 @@ final class BSATNTests: XCTestCase {
         }
         
         // Test all combinations
-        let testCases: [(UInt8, Data, UInt8, Data, UInt8, Data)] = [
+        let testCases: [(UInt8, AlgebraicValue?, UInt8, AlgebraicValue?, UInt8, AlgebraicValue?)] = [
             // All Some
-            (0, { let w = BSATNWriter(); try! w.write("first"); return w.finalize() }(),
-             0, { let w = BSATNWriter(); try! w.write("test"); return w.finalize() }(),
-             0, { let w = BSATNWriter(); try! w.write("third"); return w.finalize() }()),
+            (0, .string("first"), 0, .string("test"), 0, .string("third")),
             // All None
-            (1, Data(), 1, Data(), 1, Data()),
+            (1, nil, 1, nil, 1, nil),
             // Mixed
-            (0, { let w = BSATNWriter(); try! w.write("value"); return w.finalize() }(),
-             1, Data(),
-             0, { let w = BSATNWriter(); try! w.write("last"); return w.finalize() }())
+            (0, .string("value"), 1, nil, 0, .string("last"))
         ]
         
         for testCase in testCases {
@@ -602,23 +597,26 @@ final class BSATNTests: XCTestCase {
             XCTAssertEqual(fields.count, 3)
             
             // Verify each field
-            guard case .sum(let tag1, _) = fields[0] else {
+            guard case .sum(let tag1, let value1) = fields[0] else {
                 XCTFail("Expected sum at field 0")
                 continue
             }
             XCTAssertEqual(tag1, testCase.0)
+            XCTAssertEqual(value1, testCase.1)
             
-            guard case .sum(let tag2, _) = fields[1] else {
+            guard case .sum(let tag2, let value2) = fields[1] else {
                 XCTFail("Expected sum at field 1")
                 continue
             }
             XCTAssertEqual(tag2, testCase.2)
+            XCTAssertEqual(value2, testCase.3)
             
-            guard case .sum(let tag3, _) = fields[2] else {
+            guard case .sum(let tag3, let value3) = fields[2] else {
                 XCTFail("Expected sum at field 2")
                 continue
             }
             XCTAssertEqual(tag3, testCase.4)
+            XCTAssertEqual(value3, testCase.5)
         }
     }
     

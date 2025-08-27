@@ -165,47 +165,39 @@ public class BSATNReader {
             if let optionModel = model as? OptionModel {
                 // Option type: tag 0 = Some, tag 1 = None
                 if tag == 1 {
-                    // None variant - no data
-                    return .sum(tag: tag, value: Data())
+                    // None variant - no value
+                    return .sum(tag: tag, value: nil)
                 } else if tag == 0 {
                     // Some variant - recursively read the wrapped type
                     do {
                         // Read the wrapped value using its type definition
-                        _ = try readAlgebraicValue(as: optionModel.wrappedType)
-                        
-                        // Calculate how much data was read
-                        let endOffset = offset
-                        offset = startOffset
-                        let rawData = try readBytes(endOffset - startOffset)
-                        
-                        return .sum(tag: tag, value: Data(rawData))
+                        let wrappedValue = try readAlgebraicValue(as: optionModel.wrappedType)
+                        return .sum(tag: tag, value: wrappedValue)
                     } catch {
-                        // If reading fails, reset and return empty
+                        // If reading fails, return None variant
                         offset = startOffset
-                        return .sum(tag: tag, value: Data())
+                        throw error
                     }
                 } else {
                     // Unknown tag for Option type
-                    return .sum(tag: tag, value: Data())
+                    throw BSATNError.invalidSumTag(tag)
                 }
             } else {
                 // For non-Option sum types, we don't have enough model information
                 // This is a limitation that should be addressed with proper variant models
-                // For now, attempt to read as string if tag is 0, otherwise return empty
+                // For now, attempt to read as string if tag is 0, otherwise return nil
                 if tag == 1 {
-                    // Assume None-like variant with no data
-                    return .sum(tag: tag, value: Data())
+                    // Assume None-like variant with no value
+                    return .sum(tag: tag, value: nil)
                 } else {
                     // Try to read as string (current heuristic for backwards compatibility)
                     do {
-                        let length: UInt32 = try read()
-                        let totalSize = 4 + Int(length)
-                        offset = startOffset
-                        let rawData = try readBytes(totalSize)
-                        return .sum(tag: tag, value: Data(rawData))
+                        let stringValue = try readAlgebraicValue(as: .string)
+                        return .sum(tag: tag, value: stringValue)
                     } catch {
+                        // If string reading fails, return nil
                         offset = startOffset
-                        return .sum(tag: tag, value: Data())
+                        return .sum(tag: tag, value: nil)
                     }
                 }
             }

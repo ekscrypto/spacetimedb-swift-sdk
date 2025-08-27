@@ -139,7 +139,9 @@ public class BSATNWriter {
             }
         case .sum(let tag, let value):
             write(tag)
-            writeBytes(value)
+            if let value = value {
+                try writeAlgebraicValue(value)
+            }
         }
     }
     

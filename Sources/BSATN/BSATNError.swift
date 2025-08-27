@@ -10,4 +10,5 @@ public enum BSATNError: Error, Equatable {
     case notImplemented
     case unsupportedTag(UInt8)
     case invalidStructure(String)
+    case invalidSumTag(UInt8)
 }

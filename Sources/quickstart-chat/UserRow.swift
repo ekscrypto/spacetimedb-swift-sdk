@@ -40,11 +40,9 @@ struct UserRow {
         
         // Handle optional name (sum type: tag 0=Some, tag 1=None)
         switch modelValues[1] {
-        case .sum(tag: 0, value: let data):
-            // Some case - the data contains the string
-            let reader = BSATNReader(data: data)
-            let nameValue = try reader.readAlgebraicValue(as: .string)
-            guard case .string(let name) = nameValue else {
+        case .sum(tag: 0, value: let value):
+            // Some case - the value contains the string
+            guard let value = value, case .string(let name) = value else {
                 throw BSATNError.invalidStructure("Expected string for name")
             }
             self.name = name.isEmpty ? nil : name
