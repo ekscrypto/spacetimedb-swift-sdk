@@ -96,6 +96,7 @@ The SDK automatically handles both protocol-level compression (entire messages) 
 3. **Don't add comments** unless specifically requested
 4. **Check existing patterns** - Look at similar code before implementing new features
 5. **Binary data handling** - Always use BSATN encoding/decoding, never JSON for protocol messages
+6. **Verify all external links** - When adding URLs to documentation, ALWAYS test them using WebFetch to ensure they don't return 404 errors. This includes links to SpacetimeDB docs, GitHub repos, tutorials, etc.
 
 ### Development Guidelines
 
