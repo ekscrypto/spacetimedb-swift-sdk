@@ -6,11 +6,6 @@ import Foundation
 @Suite("Transaction Update Tests")
 struct TransactionUpdateTests {
     
-    @Test(.disabled("Test needs rewrite for new TransactionUpdate structure"))
-    func parseTransactionUpdateFromConstructedBytes() throws {
-        // This test is disabled - needs complete rewrite for new structure
-    }
-    
     @Test func parseTransactionUpdateFromRealBytes() throws {
         // The actual bytes received from the server for a TransactionUpdate message
         let hexString = """
