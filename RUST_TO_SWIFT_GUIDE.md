@@ -367,8 +367,8 @@ struct MessageRow {
 ## Related Documentation
 
 - [SpacetimeDB Getting Started](https://spacetimedb.com/docs/getting-started)
-- [SpacetimeDB Rust Module Quickstart](https://spacetimedb.com/docs/getting-started/rust-quickstart)
-- [SpacetimeDB TypeScript Client Tutorial](https://spacetimedb.com/docs/getting-started/typescript-quickstart)
+- [SpacetimeDB Rust Module Quickstart](https://spacetimedb.com/docs/modules/rust/quickstart)
+- [SpacetimeDB TypeScript Client Tutorial](https://spacetimedb.com/docs/sdks/typescript/quickstart)
 - [BSATN Format Specification](https://spacetimedb.com/docs/bsatn)
 
 ## Next Steps
