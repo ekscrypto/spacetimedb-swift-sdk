@@ -175,17 +175,16 @@ public class BSATNReader {
                 // For optional string, the data should be a string
                 // Try to read it as a string and capture the raw bytes
                 do {
-                    // Read string length
-                    let lengthStart = offset
+                    // Capture the starting position
+                    let startPos = offset
+                    // Read string length (UInt32 = 4 bytes)
                     let length: UInt32 = try read()
-                    // Read string data
-                    let stringBytes = try readBytes(Int(length))
+                    // Total size: 4 bytes (UInt32 length) + string bytes
+                    let totalSize = 4 + Int(length)
                     
-                    // Now create the raw data that was read
-                    let endOffset = offset
-                    // Reset to start and capture all the bytes
-                    offset = lengthStart
-                    let rawData = try readBytes(endOffset - lengthStart)
+                    // Reset to start and read all bytes at once
+                    offset = startPos
+                    let rawData = try readBytes(totalSize)
                     return .sum(tag: tag, value: Data(rawData))
                 } catch {
                     // If reading as string fails, reset and return empty
