@@ -298,6 +298,7 @@ The SDK includes unit tests for core components but lacks end-to-end protocol te
 
 ## Lessons learned
 
+* **Why SpacetimeDB moved from Protobuf to BSATN**: The SpacetimeDB team abandoned Protobuf in favor of BSATN due to severe performance issues with the C# implementation, which introduced processing delays of up to 800ms in some scenarios. The extensive feature set of Protobuf made optimization difficult, leading to the development of BSATN as a simpler, more performant binary serialization format. (Source: [SpacetimeDB 0.11 release video](https://youtu.be/Z7MWdAEtv88?si=G65vvS1qiln7pub4))
 * SATS-JSON supports 128-bit and 256-bit integer values which aren't supported by JSONDecoder and JSONSerialization.
 * BSATN documentation is severely lacking, or at least not obvious and may require review of the Rust implementation to fully implement
 * The "Quickchat Start" demo client makes uses of a the "connection_id" parameter which is marked as Internal and not to be used like this
