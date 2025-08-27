@@ -12,7 +12,7 @@ public final class BSATNMessageHandler {
     public func processMessage(_ data: Data) throws -> DecodedMessage {
         let reader = BSATNReader(data: data)
         guard let compression = Compression(rawValue: try reader.read()),
-              compression == .uncompressed
+              compression == .none
         else {
             throw BSATNError.notImplemented
         }

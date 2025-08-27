@@ -5,7 +5,7 @@
 //  Created by Dave Poirier on 2025-08-18.
 //
 
-public enum BSATNError: Error {
+public enum BSATNError: Error, Equatable {
     case insufficientData
     case notImplemented
     case unsupportedTag(UInt8)

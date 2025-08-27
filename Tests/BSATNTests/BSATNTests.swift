@@ -454,6 +454,63 @@ final class BSATNTests: XCTestCase {
         XCTAssertEqual(inner2, [.uint8(3), .uint8(4)])
     }
     
+    func testInt256Encoding() throws {
+        let value = Int256(u0: 0x0123456789ABCDEF, u1: 0xFEDCBA9876543210,
+                          u2: 0x1111111111111111, u3: 0x2222222222222222)
+        
+        let writer = BSATNWriter()
+        writer.write(value)
+        let data = writer.finalize()
+        
+        XCTAssertEqual(data.count, 32)
+        
+        // Read it back
+        let reader = BSATNReader(data: data)
+        let decoded: Int256 = try reader.read()
+        
+        XCTAssertEqual(decoded, value)
+        XCTAssertEqual(decoded.u0, 0x0123456789ABCDEF)
+        XCTAssertEqual(decoded.u1, 0xFEDCBA9876543210)
+        XCTAssertEqual(decoded.u2, 0x1111111111111111)
+        XCTAssertEqual(decoded.u3, 0x2222222222222222)
+    }
+    
+    func testInt256CodableEncoding() throws {
+        let value = Int256(u0: 0x0123456789ABCDEF, u1: 0xFEDCBA9876543210,
+                          u2: 0xAAAAAAAAAAAAAAAA, u3: 0xBBBBBBBBBBBBBBBB)
+        
+        // Test JSON encoding
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(value)
+        let jsonString = String(data: jsonData, encoding: .utf8)
+        
+        // Should encode as hex string (lowercase)
+        XCTAssertEqual(jsonString, "\"bbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaafedcba98765432100123456789abcdef\"")
+        
+        // Test JSON decoding
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(Int256.self, from: jsonData)
+        XCTAssertEqual(decoded, value)
+    }
+    
+    func testInt256AlgebraicValue() throws {
+        let value = Int256(u0: 0xDEADBEEF, u1: 0xCAFEBABE, u2: 0, u3: 0)
+        
+        let writer = BSATNWriter()
+        try writer.writeAlgebraicValue(.int256(value))
+        let data = writer.finalize()
+        
+        let reader = BSATNReader(data: data)
+        let decoded = try reader.readAlgebraicValue(as: .int256)
+        
+        guard case .int256(let decodedValue) = decoded else {
+            XCTFail("Expected int256")
+            return
+        }
+        
+        XCTAssertEqual(decodedValue, value)
+    }
+    
     func testInt128Encoding() throws {
         let value = Int128(u0: 0x0123456789ABCDEF, u1: 0xFEDCBA9876543210)
         

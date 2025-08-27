@@ -45,7 +45,7 @@ extension SpacetimeDBClient {
         self.clientDelegate = clientDelegate
         self.socketDelegate = socketDelegate
 
-        let v1Url = URL(string: "\(host)/v1/database/\(dbName)/subscribe?compression=\(compression.rawValue)")!
+        let v1Url = URL(string: "\(host)/v1/database/\(dbName)/subscribe?compression=\(compression.serverString)")!
         var request = URLRequest(
             url: v1Url,
             cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,

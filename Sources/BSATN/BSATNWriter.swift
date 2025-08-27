@@ -48,6 +48,11 @@ public class BSATNWriter {
         data.append(stringData)
     }
     
+    /// Write raw data directly
+    public func write(_ value: Data) {
+        data.append(value)
+    }
+    
     /// Write a string with UInt16 length prefix (for compatibility)
     public func writeStringU16(_ value: String) throws {
         guard let stringData = value.data(using: .utf8) else {

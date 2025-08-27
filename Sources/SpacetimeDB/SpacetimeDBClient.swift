@@ -20,11 +20,6 @@ public actor SpacetimeDBClient {
         case unsupportedCompression(String)
     }
 
-    public enum Compression: String {
-        case none = "None"
-        case brotli = "Brotli"
-        case gzip = "Gzip"
-    }
 
     /// Returns a non-connected instance of the SpacetimeDBClient
     ///
