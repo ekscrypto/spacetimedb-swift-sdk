@@ -107,9 +107,9 @@ The Swift chat client implements all core features from the official tutorials, 
 ### Related Implementations
 
 For comparison and reference, see the official SpacetimeDB quickstart tutorials:
-- [Rust Tutorial](https://spacetimedb.com/docs/getting-started/rust-quickstart)
-- [TypeScript Tutorial](https://spacetimedb.com/docs/getting-started/typescript-quickstart)
-- [Server Module Source](https://github.com/clockworklabs/SpacetimeDBCircleCI/tree/master/modules/quickstart-chat)
+- [Rust Tutorial](https://spacetimedb.com/docs/sdks/rust/quickstart)
+- [TypeScript Tutorial](https://spacetimedb.com/docs/sdks/typescript/quickstart)
+- [Server Module Tutorial](https://spacetimedb.com/docs/modules/rust/quickstart)
 
 ## Usage
 
