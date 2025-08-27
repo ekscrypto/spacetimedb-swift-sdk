@@ -180,4 +180,4 @@ The SDK now has comprehensive test coverage (~70%+) including:
 - **DatabaseUpdate** - Complex batch operations
 - **QueryUpdate** - Comprehensive query result scenarios
 
-The SDK uses both XCTest (legacy tests) and Swift Testing framework (new tests) for comprehensive coverage.
+**DO NOT USE XCTest** use the Swift Testing framework only

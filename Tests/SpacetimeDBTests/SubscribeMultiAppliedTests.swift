@@ -1,10 +1,12 @@
-import XCTest
+import Testing
+import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-final class SubscribeMultiAppliedTests: XCTestCase {
+@Suite("SubscribeMultiApplied Tests")
+struct SubscribeMultiAppliedTests {
     
-    func testTableIDsAreConsistent() throws {
+    @Test func tableIDsAreConsistent() throws {
         // Test that table IDs like 4097 (0x1001) are valid
         // These are the actual IDs assigned by SpacetimeDB
         
@@ -47,23 +49,23 @@ final class SubscribeMultiAppliedTests: XCTestCase {
         let subscribeMultiApplied = try SubscribeMultiApplied(reader: reader)
         
         // Verify table ID
-        XCTAssertEqual(subscribeMultiApplied.update.tableUpdates.count, 1)
+        #expect(subscribeMultiApplied.update.tableUpdates.count == 1)
         let tableUpdate = subscribeMultiApplied.update.tableUpdates[0]
-        XCTAssertEqual(tableUpdate.id, 4097, "Table ID 4097 (0x1001) is valid")
-        XCTAssertEqual(tableUpdate.name, "message")
+        #expect(tableUpdate.id == 4097, "Table ID 4097 (0x1001) is valid")
+        #expect(tableUpdate.name == "message")
         
         print("✅ Table ID 4097 is confirmed as valid")
     }
     
-    func testUserTableID() throws {
+    @Test func userTableID() throws {
         // The "user" table typically has ID 4096 (0x1000)
         let userTableId: UInt32 = 4096
         print("User table ID: \(userTableId) (0x\(String(format: "%04X", userTableId)))")
-        XCTAssertEqual(userTableId, 0x1000)
+        #expect(userTableId == 0x1000)
         
         // Message table would be 4097 (0x1001)
         let messageTableId: UInt32 = 4097
         print("Message table ID: \(messageTableId) (0x\(String(format: "%04X", messageTableId)))")
-        XCTAssertEqual(messageTableId, 0x1001)
+        #expect(messageTableId == 0x1001)
     }
 }

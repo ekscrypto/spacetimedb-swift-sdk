@@ -1,72 +1,77 @@
-import XCTest
+import Testing
+import Foundation
 @testable import BSATN
 
-final class BSATNTests: XCTestCase {
+@Suite("BSATN Tests")
+struct BSATNTests {
     
     // MARK: - Basic Type Tests
     
-    func testBoolEncoding() throws {
+    @Test("Bool encoding and decoding")
+    func boolEncoding() throws {
         let writer = BSATNWriter()
         writer.write(true)
         writer.write(false)
         let data = writer.finalize()
         
-        XCTAssertEqual(data.count, 2)
-        XCTAssertEqual(data[0], 0x01) // true
-        XCTAssertEqual(data[1], 0x00) // false
+        #expect(data.count == 2)
+        #expect(data[0] == 0x01) // true
+        #expect(data[1] == 0x00) // false
         
         // Test decoding
         let reader = BSATNReader(data: data)
         let value1: Bool = try reader.read()
         let value2: Bool = try reader.read()
         
-        XCTAssertEqual(value1, true)
-        XCTAssertEqual(value2, false)
+        #expect(value1 == true)
+        #expect(value2 == false)
     }
     
-    func testUInt8Encoding() throws {
+    @Test("UInt8 encoding and decoding")
+    func uint8Encoding() throws {
         let writer = BSATNWriter()
         writer.write(UInt8(0))
         writer.write(UInt8(42))
         writer.write(UInt8(255))
         let data = writer.finalize()
         
-        XCTAssertEqual(data.count, 3)
+        #expect(data.count == 3)
         
         let reader = BSATNReader(data: data)
-        XCTAssertEqual(try reader.read() as UInt8, 0)
-        XCTAssertEqual(try reader.read() as UInt8, 42)
-        XCTAssertEqual(try reader.read() as UInt8, 255)
+        #expect(try reader.read() as UInt8 == 0)
+        #expect(try reader.read() as UInt8 == 42)
+        #expect(try reader.read() as UInt8 == 255)
     }
     
-    func testUInt32Encoding() throws {
+    @Test("UInt32 encoding and decoding")
+    func uint32Encoding() throws {
         let writer = BSATNWriter()
         writer.write(UInt32(0x12345678))
         let data = writer.finalize()
         
-        XCTAssertEqual(data.count, 4)
+        #expect(data.count == 4)
         // Little-endian encoding
-        XCTAssertEqual(data[0], 0x78)
-        XCTAssertEqual(data[1], 0x56)
-        XCTAssertEqual(data[2], 0x34)
-        XCTAssertEqual(data[3], 0x12)
+        #expect(data[0] == 0x78)
+        #expect(data[1] == 0x56)
+        #expect(data[2] == 0x34)
+        #expect(data[3] == 0x12)
         
         let reader = BSATNReader(data: data)
-        XCTAssertEqual(try reader.read() as UInt32, 0x12345678)
+        #expect(try reader.read() as UInt32 == 0x12345678)
     }
     
-    func testUInt64Encoding() throws {
+    @Test func uint64Encoding() throws {
         let writer = BSATNWriter()
         writer.write(UInt64(0x123456789ABCDEF0))
         let data = writer.finalize()
         
-        XCTAssertEqual(data.count, 8)
+        #expect(data.count == 8)
         
         let reader = BSATNReader(data: data)
-        XCTAssertEqual(try reader.read() as UInt64, 0x123456789ABCDEF0)
+        #expect(try reader.read() as UInt64 == 0x123456789ABCDEF0)
     }
     
-    func testInt32Encoding() throws {
+    @Test func int32Encoding() throws {
         let writer = BSATNWriter()
         writer.write(Int32(-1))
         writer.write(Int32(42))
@@ -75,13 +80,13 @@ final class BSATNTests: XCTestCase {
         let data = writer.finalize()
         
         let reader = BSATNReader(data: data)
-        XCTAssertEqual(try reader.read() as Int32, -1)
-        XCTAssertEqual(try reader.read() as Int32, 42)
-        XCTAssertEqual(try reader.read() as Int32, Int32.min)
-        XCTAssertEqual(try reader.read() as Int32, Int32.max)
+        #expect(try reader.read() as Int32 == -1)
+        #expect(try reader.read() as Int32 == 42)
+        #expect(try reader.read() as Int32 == Int32.min)
+        #expect(try reader.read() as Int32 == Int32.max)
     }
     
-    func testStringEncoding() throws {
+    @Test func stringEncoding() throws {
         let writer = BSATNWriter()
         try writer.write("")
         try writer.write("Hello")
@@ -90,13 +95,13 @@ final class BSATNTests: XCTestCase {
         let data = writer.finalize()
         
         let reader = BSATNReader(data: data)
-        XCTAssertEqual(try reader.readString(), "")
-        XCTAssertEqual(try reader.readString(), "Hello")
-        XCTAssertEqual(try reader.readString(), "Hello, world!")
-        XCTAssertEqual(try reader.readString(), "🚀 Unicode!")
+        #expect(try reader.readString() == "")
+        #expect(try reader.readString() == "Hello")
+        #expect(try reader.readString() == "Hello, world!")
+        #expect(try reader.readString() == "🚀 Unicode!")
     }
     
-    func testUInt256Encoding() throws {
+    @Test func uint256Encoding() throws {
         let value = UInt256(u0: 0x0123456789ABCDEF, u1: 0xFEDCBA9876543210,
                            u2: 0x1111111111111111, u3: 0x2222222222222222)
         
@@ -104,20 +109,20 @@ final class BSATNTests: XCTestCase {
         writer.write(value)
         let data = writer.finalize()
         
-        XCTAssertEqual(data.count, 32)
+        #expect(data.count == 32)
         
         let reader = BSATNReader(data: data)
         let decoded: UInt256 = try reader.read()
         
-        XCTAssertEqual(decoded.u0, value.u0)
-        XCTAssertEqual(decoded.u1, value.u1)
-        XCTAssertEqual(decoded.u2, value.u2)
-        XCTAssertEqual(decoded.u3, value.u3)
+        #expect(decoded.u0 == value.u0)
+        #expect(decoded.u1 == value.u1)
+        #expect(decoded.u2 == value.u2)
+        #expect(decoded.u3 == value.u3)
     }
     
     // MARK: - AlgebraicValue Tests
     
-    func testAlgebraicValueBasicTypes() throws {
+    @Test func algebraicValueBasicTypes() throws {
         let writer = BSATNWriter()
         try writer.writeAlgebraicValue(.bool(true))
         try writer.writeAlgebraicValue(.uint8(42))
@@ -128,19 +133,19 @@ final class BSATNTests: XCTestCase {
         let reader = BSATNReader(data: data)
         
         let boolValue = try reader.readAlgebraicValue(as: .bool)
-        XCTAssertEqual(boolValue, .bool(true))
+        #expect(boolValue == .bool(true))
         
         let uint8Value = try reader.readAlgebraicValue(as: .uint8)
-        XCTAssertEqual(uint8Value, .uint8(42))
+        #expect(uint8Value == .uint8(42))
         
         let uint32Value = try reader.readAlgebraicValue(as: .uint32)
-        XCTAssertEqual(uint32Value, .uint32(12345))
+        #expect(uint32Value == .uint32(12345))
         
         let stringValue = try reader.readAlgebraicValue(as: .string)
-        XCTAssertEqual(stringValue, .string("test"))
+        #expect(stringValue == .string("test"))
     }
     
-    func testArrayEncoding() throws {
+    @Test func arrayEncoding() throws {
         let writer = BSATNWriter()
         let array: AlgebraicValue = .array([
             .uint32(1),
@@ -160,17 +165,17 @@ final class BSATNTests: XCTestCase {
         let decoded = try reader.readAlgebraicValue(as: .array(UInt32ArrayModel()))
         
         guard case .array(let elements) = decoded else {
-            XCTFail("Expected array")
+            Issue.record("Expected array")
             return
         }
         
-        XCTAssertEqual(elements.count, 3)
-        XCTAssertEqual(elements[0], .uint32(1))
-        XCTAssertEqual(elements[1], .uint32(2))
-        XCTAssertEqual(elements[2], .uint32(3))
+        #expect(elements.count == 3)
+        #expect(elements[0] == .uint32(1))
+        #expect(elements[1] == .uint32(2))
+        #expect(elements[2] == .uint32(3))
     }
     
-    func testProductEncoding() throws {
+    @Test func productEncoding() throws {
         // Create a simple product (like a struct with two fields)
         struct TestProduct: ProductModel {
             var definition: [AlgebraicValueType] { [
@@ -191,16 +196,16 @@ final class BSATNTests: XCTestCase {
         let decoded = try reader.readAlgebraicValue(as: .product(TestProduct()))
         
         guard case .product(let fields) = decoded else {
-            XCTFail("Expected product")
+            Issue.record("Expected product")
             return
         }
         
-        XCTAssertEqual(fields.count, 2)
-        XCTAssertEqual(fields[0], .uint32(42))
-        XCTAssertEqual(fields[1], .string("answer"))
+        #expect(fields.count == 2)
+        #expect(fields[0] == .uint32(42))
+        #expect(fields[1] == .string("answer"))
     }
     
-    func testOptionTypeEncoding() throws {
+    @Test func optionTypeEncoding() throws {
         let writer = BSATNWriter()
         
         // Write Some("hello")
@@ -216,16 +221,16 @@ final class BSATNTests: XCTestCase {
         
         // Read Some("hello")
         let someValue = try reader.readOptional { try reader.readString() }
-        XCTAssertEqual(someValue, "hello")
+        #expect(someValue == "hello")
         
         // Read None
         let noneValue = try reader.readOptional { try reader.readString() }
-        XCTAssertNil(noneValue)
+        #expect(noneValue == nil)
     }
     
     // MARK: - Round-trip Tests
     
-    func testRoundTripComplexStructure() throws {
+    @Test func roundTripComplexStructure() throws {
         // Simulate a UserRow-like structure
         struct UserLike: ProductModel {
             var definition: [AlgebraicValueType] { [
@@ -250,22 +255,22 @@ final class BSATNTests: XCTestCase {
         let decoded1 = try reader1.readAlgebraicValue(as: .product(UserLike()))
         
         guard case .product(let fields1) = decoded1 else {
-            XCTFail("Expected product")
+            Issue.record("Expected product")
             return
         }
         
-        XCTAssertEqual(fields1[0], .uint256(identity))
+        #expect(fields1[0] == .uint256(identity))
         guard case .sum(let tag1, let nameValue1) = fields1[1] else {
-            XCTFail("Expected sum for optional")
+            Issue.record("Expected sum for optional")
             return
         }
-        XCTAssertEqual(tag1, 0) // Some
+        #expect(tag1 == 0) // Some
         guard let nameValue1 = nameValue1, case .string(let name1) = nameValue1 else {
-            XCTFail("Expected string value for Some variant")
+            Issue.record("Expected string value for Some variant")
             return
         }
-        XCTAssertEqual(name1, "Alice")
-        XCTAssertEqual(fields1[2], .bool(true))
+        #expect(name1 == "Alice")
+        #expect(fields1[2] == .bool(true))
         
         // Test with None
         let writer2 = BSATNWriter()
@@ -280,19 +285,19 @@ final class BSATNTests: XCTestCase {
         let decoded2 = try reader2.readAlgebraicValue(as: .product(UserLike()))
         
         guard case .product(let fields2) = decoded2 else {
-            XCTFail("Expected product")
+            Issue.record("Expected product")
             return
         }
         
         guard case .sum(let tag2, let nameValue2) = fields2[1] else {
-            XCTFail("Expected sum for optional")
+            Issue.record("Expected sum for optional")
             return
         }
-        XCTAssertEqual(tag2, 1) // None
-        XCTAssertNil(nameValue2)
+        #expect(tag2 == 1) // None
+        #expect(nameValue2 == nil)
     }
     
-    func testMessageRowRoundTrip() throws {
+    @Test func messageRowRoundTrip() throws {
         // Simulate a MessageRow structure
         struct MessageLike: ProductModel {
             var definition: [AlgebraicValueType] { [
@@ -319,31 +324,28 @@ final class BSATNTests: XCTestCase {
         let decoded = try reader.readAlgebraicValue(as: .product(MessageLike()))
         
         guard case .product(let fields) = decoded else {
-            XCTFail("Expected product")
+            Issue.record("Expected product")
             return
         }
         
-        XCTAssertEqual(fields[0], .uint256(sender))
-        XCTAssertEqual(fields[1], .uint64(timestamp))
-        XCTAssertEqual(fields[2], .string(text))
+        #expect(fields[0] == .uint256(sender))
+        #expect(fields[1] == .uint64(timestamp))
+        #expect(fields[2] == .string(text))
     }
     
     // MARK: - Error Handling Tests
     
-    func testInsufficientDataError() throws {
+    @Test func insufficientDataError() throws {
         let data = Data([0x01]) // Only 1 byte
         let reader = BSATNReader(data: data)
         
         // Try to read a UInt32 (needs 4 bytes)
-        XCTAssertThrowsError(try reader.read() as UInt32) { error in
-            guard case BSATNError.insufficientData = error else {
-                XCTFail("Expected insufficientData error")
-                return
-            }
+        #expect(throws: BSATNError.insufficientData) {
+            _ = try reader.read() as UInt32
         }
     }
     
-    func testStringWithInvalidUTF8() throws {
+    @Test func stringWithInvalidUTF8() throws {
         let writer = BSATNWriter()
         // Write string length
         writer.write(UInt32(4))
@@ -352,16 +354,14 @@ final class BSATNTests: XCTestCase {
         let data = writer.finalize()
         
         let reader = BSATNReader(data: data)
-        XCTAssertThrowsError(try reader.readString()) { error in
-            // BSATNReader throws a general error for invalid UTF-8
-            // We'll just check that it throws an error
-            XCTAssertNotNil(error)
+        #expect(throws: (any Error).self) {
+            _ = try reader.readString()
         }
     }
     
     // MARK: - Additional Edge Case Tests
     
-    func testEmptyArray() throws {
+    @Test func emptyArray() throws {
         let writer = BSATNWriter()
         let array: AlgebraicValue = .array([])
         try writer.writeAlgebraicValue(array)
@@ -376,14 +376,14 @@ final class BSATNTests: XCTestCase {
         let decoded = try reader.readAlgebraicValue(as: .array(EmptyArrayModel()))
         
         guard case .array(let elements) = decoded else {
-            XCTFail("Expected array")
+            Issue.record("Expected array")
             return
         }
         
-        XCTAssertEqual(elements.count, 0)
+        #expect(elements.count == 0)
     }
     
-    func testLargeArray() throws {
+    @Test func largeArray() throws {
         let writer = BSATNWriter()
         var elements: [AlgebraicValue] = []
         for i in 0..<1000 {
@@ -402,17 +402,17 @@ final class BSATNTests: XCTestCase {
         let decoded = try reader.readAlgebraicValue(as: .array(UInt32ArrayModel()))
         
         guard case .array(let decodedElements) = decoded else {
-            XCTFail("Expected array")
+            Issue.record("Expected array")
             return
         }
         
-        XCTAssertEqual(decodedElements.count, 1000)
+        #expect(decodedElements.count == 1000)
         for i in 0..<1000 {
-            XCTAssertEqual(decodedElements[i], .uint32(UInt32(i)))
+            #expect(decodedElements[i] == .uint32(UInt32(i)))
         }
     }
     
-    func testNestedArrays() throws {
+    @Test func nestedArrays() throws {
         // Test array of arrays
         struct InnerArrayModel: ArrayModel {
             var definition: AlgebraicValueType { .uint8 }
@@ -434,26 +434,26 @@ final class BSATNTests: XCTestCase {
         let decoded = try reader.readAlgebraicValue(as: .array(OuterArrayModel()))
         
         guard case .array(let outer) = decoded else {
-            XCTFail("Expected outer array")
+            Issue.record("Expected outer array")
             return
         }
         
-        XCTAssertEqual(outer.count, 2)
+        #expect(outer.count == 2)
         
         guard case .array(let inner1) = outer[0] else {
-            XCTFail("Expected inner array 1")
+            Issue.record("Expected inner array 1")
             return
         }
-        XCTAssertEqual(inner1, [.uint8(1), .uint8(2)])
+        #expect(inner1 == [.uint8(1), .uint8(2)])
         
         guard case .array(let inner2) = outer[1] else {
-            XCTFail("Expected inner array 2")
+            Issue.record("Expected inner array 2")
             return
         }
-        XCTAssertEqual(inner2, [.uint8(3), .uint8(4)])
+        #expect(inner2 == [.uint8(3), .uint8(4)])
     }
     
-    func testInt256Encoding() throws {
+    @Test func int256Encoding() throws {
         let value = Int256(u0: 0x0123456789ABCDEF, u1: 0xFEDCBA9876543210,
                           u2: 0x1111111111111111, u3: 0x2222222222222222)
         
@@ -461,20 +461,20 @@ final class BSATNTests: XCTestCase {
         writer.write(value)
         let data = writer.finalize()
         
-        XCTAssertEqual(data.count, 32)
+        #expect(data.count == 32)
         
         // Read it back
         let reader = BSATNReader(data: data)
         let decoded: Int256 = try reader.read()
         
-        XCTAssertEqual(decoded, value)
-        XCTAssertEqual(decoded.u0, 0x0123456789ABCDEF)
-        XCTAssertEqual(decoded.u1, 0xFEDCBA9876543210)
-        XCTAssertEqual(decoded.u2, 0x1111111111111111)
-        XCTAssertEqual(decoded.u3, 0x2222222222222222)
+        #expect(decoded == value)
+        #expect(decoded.u0 == 0x0123456789ABCDEF)
+        #expect(decoded.u1 == 0xFEDCBA9876543210)
+        #expect(decoded.u2 == 0x1111111111111111)
+        #expect(decoded.u3 == 0x2222222222222222)
     }
     
-    func testInt256CodableEncoding() throws {
+    @Test func int256CodableEncoding() throws {
         let value = Int256(u0: 0x0123456789ABCDEF, u1: 0xFEDCBA9876543210,
                           u2: 0xAAAAAAAAAAAAAAAA, u3: 0xBBBBBBBBBBBBBBBB)
         
@@ -484,15 +484,15 @@ final class BSATNTests: XCTestCase {
         let jsonString = String(data: jsonData, encoding: .utf8)
         
         // Should encode as hex string (lowercase)
-        XCTAssertEqual(jsonString, "\"bbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaafedcba98765432100123456789abcdef\"")
+        #expect(jsonString == "\"bbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaafedcba98765432100123456789abcdef\"")
         
         // Test JSON decoding
         let decoder = JSONDecoder()
         let decoded = try decoder.decode(Int256.self, from: jsonData)
-        XCTAssertEqual(decoded, value)
+        #expect(decoded == value)
     }
     
-    func testInt256AlgebraicValue() throws {
+    @Test func int256AlgebraicValue() throws {
         let value = Int256(u0: 0xDEADBEEF, u1: 0xCAFEBABE, u2: 0, u3: 0)
         
         let writer = BSATNWriter()
@@ -503,30 +503,30 @@ final class BSATNTests: XCTestCase {
         let decoded = try reader.readAlgebraicValue(as: .int256)
         
         guard case .int256(let decodedValue) = decoded else {
-            XCTFail("Expected int256")
+            Issue.record("Expected int256")
             return
         }
         
-        XCTAssertEqual(decodedValue, value)
+        #expect(decodedValue == value)
     }
     
-    func testInt128Encoding() throws {
+    @Test func int128Encoding() throws {
         let value = Int128(u0: 0x0123456789ABCDEF, u1: 0xFEDCBA9876543210)
         
         let writer = BSATNWriter()
         writer.write(value)
         let data = writer.finalize()
         
-        XCTAssertEqual(data.count, 16)
+        #expect(data.count == 16)
         
         let reader = BSATNReader(data: data)
         let decoded: Int128 = try reader.read()
         
-        XCTAssertEqual(decoded.u0, value.u0)
-        XCTAssertEqual(decoded.u1, value.u1)
+        #expect(decoded.u0 == value.u0)
+        #expect(decoded.u1 == value.u1)
     }
     
-    func testFloat32Encoding() throws {
+    @Test func float32Encoding() throws {
         let writer = BSATNWriter()
         writer.write(Float32(3.14159))
         writer.write(Float32.infinity)
@@ -535,13 +535,13 @@ final class BSATNTests: XCTestCase {
         let data = writer.finalize()
         
         let reader = BSATNReader(data: data)
-        XCTAssertEqual(try reader.read() as Float32, Float32(3.14159))
-        XCTAssertEqual(try reader.read() as Float32, Float32.infinity)
-        XCTAssertTrue((try reader.read() as Float32).isNaN)
-        XCTAssertEqual(try reader.read() as Float32, Float32(-0.0))
+        #expect(try reader.read() as Float32 == Float32(3.14159))
+        #expect(try reader.read() as Float32 == Float32.infinity)
+        #expect((try reader.read() as Float32).isNaN)
+        #expect(try reader.read() as Float32 == Float32(-0.0))
     }
     
-    func testFloat64Encoding() throws {
+    @Test func float64Encoding() throws {
         let writer = BSATNWriter()
         writer.write(Float64(2.718281828459045))
         writer.write(Float64.infinity)
@@ -550,13 +550,13 @@ final class BSATNTests: XCTestCase {
         let data = writer.finalize()
         
         let reader = BSATNReader(data: data)
-        XCTAssertEqual(try reader.read() as Float64, Float64(2.718281828459045))
-        XCTAssertEqual(try reader.read() as Float64, Float64.infinity)
-        XCTAssertEqual(try reader.read() as Float64, -Float64.infinity)
-        XCTAssertTrue((try reader.read() as Float64).isNaN)
+        #expect(try reader.read() as Float64 == Float64(2.718281828459045))
+        #expect(try reader.read() as Float64 == Float64.infinity)
+        #expect(try reader.read() as Float64 == -Float64.infinity)
+        #expect((try reader.read() as Float64).isNaN)
     }
     
-    func testMultipleOptionals() throws {
+    @Test func multipleOptionals() throws {
         // Test a product with multiple optional string fields
         // Note: The current BSATNReader implementation assumes sum types with tag 0 contain string data
         struct MultiOptionalProduct: ProductModel {
@@ -590,67 +590,67 @@ final class BSATNTests: XCTestCase {
             let decoded = try reader.readAlgebraicValue(as: .product(MultiOptionalProduct()))
             
             guard case .product(let fields) = decoded else {
-                XCTFail("Expected product")
+                Issue.record("Expected product")
                 continue
             }
             
-            XCTAssertEqual(fields.count, 3)
+            #expect(fields.count == 3)
             
             // Verify each field
             guard case .sum(let tag1, let value1) = fields[0] else {
-                XCTFail("Expected sum at field 0")
+                Issue.record("Expected sum at field 0")
                 continue
             }
-            XCTAssertEqual(tag1, testCase.0)
-            XCTAssertEqual(value1, testCase.1)
+            #expect(tag1 == testCase.0)
+            #expect(value1 == testCase.1)
             
             guard case .sum(let tag2, let value2) = fields[1] else {
-                XCTFail("Expected sum at field 1")
+                Issue.record("Expected sum at field 1")
                 continue
             }
-            XCTAssertEqual(tag2, testCase.2)
-            XCTAssertEqual(value2, testCase.3)
+            #expect(tag2 == testCase.2)
+            #expect(value2 == testCase.3)
             
             guard case .sum(let tag3, let value3) = fields[2] else {
-                XCTFail("Expected sum at field 2")
+                Issue.record("Expected sum at field 2")
                 continue
             }
-            XCTAssertEqual(tag3, testCase.4)
-            XCTAssertEqual(value3, testCase.5)
+            #expect(tag3 == testCase.4)
+            #expect(value3 == testCase.5)
         }
     }
     
-    func testWriterClearAndReuse() throws {
+    @Test func writerClearAndReuse() throws {
         let writer = BSATNWriter()
         
         // Write some data
         writer.write(UInt32(123))
         let data1 = writer.finalize()
-        XCTAssertEqual(data1.count, 4)
+        #expect(data1.count == 4)
         
         // Write more data (writer should be clear after finalize)
         writer.write(UInt64(456))
         let data2 = writer.finalize()
-        XCTAssertEqual(data2.count, 8)
+        #expect(data2.count == 8)
         
         // Explicitly clear and write again
         writer.clear()
         writer.write(UInt8(7))
         let data3 = writer.finalize()
-        XCTAssertEqual(data3.count, 1)
+        #expect(data3.count == 1)
         
         // Verify each piece of data independently
         let reader1 = BSATNReader(data: data1)
-        XCTAssertEqual(try reader1.read() as UInt32, 123)
+        #expect(try reader1.read() as UInt32 == 123)
         
         let reader2 = BSATNReader(data: data2)
-        XCTAssertEqual(try reader2.read() as UInt64, 456)
+        #expect(try reader2.read() as UInt64 == 456)
         
         let reader3 = BSATNReader(data: data3)
-        XCTAssertEqual(try reader3.read() as UInt8, 7)
+        #expect(try reader3.read() as UInt8 == 7)
     }
     
-    func testBoundaryValues() throws {
+    @Test func boundaryValues() throws {
         let writer = BSATNWriter()
         
         // Test boundary values for different integer types
@@ -675,22 +675,22 @@ final class BSATNTests: XCTestCase {
         let data = writer.finalize()
         let reader = BSATNReader(data: data)
         
-        XCTAssertEqual(try reader.read() as UInt8, UInt8.min)
-        XCTAssertEqual(try reader.read() as UInt8, UInt8.max)
-        XCTAssertEqual(try reader.read() as UInt16, UInt16.min)
-        XCTAssertEqual(try reader.read() as UInt16, UInt16.max)
-        XCTAssertEqual(try reader.read() as UInt32, UInt32.min)
-        XCTAssertEqual(try reader.read() as UInt32, UInt32.max)
-        XCTAssertEqual(try reader.read() as UInt64, UInt64.min)
-        XCTAssertEqual(try reader.read() as UInt64, UInt64.max)
+        #expect(try reader.read() as UInt8 == UInt8.min)
+        #expect(try reader.read() as UInt8 == UInt8.max)
+        #expect(try reader.read() as UInt16 == UInt16.min)
+        #expect(try reader.read() as UInt16 == UInt16.max)
+        #expect(try reader.read() as UInt32 == UInt32.min)
+        #expect(try reader.read() as UInt32 == UInt32.max)
+        #expect(try reader.read() as UInt64 == UInt64.min)
+        #expect(try reader.read() as UInt64 == UInt64.max)
         
-        XCTAssertEqual(try reader.read() as Int8, Int8.min)
-        XCTAssertEqual(try reader.read() as Int8, Int8.max)
-        XCTAssertEqual(try reader.read() as Int16, Int16.min)
-        XCTAssertEqual(try reader.read() as Int16, Int16.max)
-        XCTAssertEqual(try reader.read() as Int32, Int32.min)
-        XCTAssertEqual(try reader.read() as Int32, Int32.max)
-        XCTAssertEqual(try reader.read() as Int64, Int64.min)
-        XCTAssertEqual(try reader.read() as Int64, Int64.max)
+        #expect(try reader.read() as Int8 == Int8.min)
+        #expect(try reader.read() as Int8 == Int8.max)
+        #expect(try reader.read() as Int16 == Int16.min)
+        #expect(try reader.read() as Int16 == Int16.max)
+        #expect(try reader.read() as Int32 == Int32.min)
+        #expect(try reader.read() as Int32 == Int32.max)
+        #expect(try reader.read() as Int64 == Int64.min)
+        #expect(try reader.read() as Int64 == Int64.max)
     }
 }
