@@ -4,7 +4,7 @@ SDK to connect to SpacetimeDB from Swift
 This is a community project and is not an official SDK supported by Clockwork Labs.
 For more information about SpacetimeDB, visit https://spacetimedb.com
 
-STATUS: Beta -- Core functionality stable with comprehensive test coverage.
+STATUS: Alpha -- Core features working but protocol implementation incomplete. Production use not recommended.
 
 ## Installation
 
@@ -206,13 +206,20 @@ let requestId = try await client.callReducer(reducer)
 
 ### Test Coverage
 
-The SDK includes comprehensive unit tests for:
-- ✅ **BSATN Types**: All primitive types, arrays, products, and AlgebraicValues
-- ✅ **Large Integers**: UInt128, UInt256, Int128, Int256 with JSON encoding
-- ✅ **Protocol Messages**: IdentityToken, BsatnRowList, CompressibleQueryUpdate
-- ✅ **Compression**: Unified compression enum with Brotli support
-- ✅ **Message Handling**: BSATNMessageHandler with various message types
-- ✅ **Integration Tests**: Real server message parsing and connection lifecycle
+The SDK includes unit tests for core components but lacks end-to-end protocol testing:
+
+**✅ Well Tested:**
+- **BSATN Types**: All primitive types, arrays, products, and AlgebraicValues
+- **Large Integers**: UInt128, UInt256, Int128, Int256 with JSON encoding
+- **Core Messages**: IdentityToken, BsatnRowList, CompressibleQueryUpdate
+- **Compression**: Unified compression enum with Brotli support
+- **Message Handling**: BSATNMessageHandler with various message types
+
+**⚠️ Limited Testing:**
+- **Protocol Flow**: Connection lifecycle, subscription management
+- **Error Recovery**: Network failures, malformed messages
+- **Edge Cases**: Large messages, concurrent operations
+- **Unimplemented Features**: Cannot test OneOffQuery, Unsubscribe, Events
 
 ### Known Limitations
 
