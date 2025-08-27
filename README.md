@@ -113,6 +113,14 @@ For comparison and reference, see the official SpacetimeDB quickstart tutorials:
 
 ## Usage
 
+### Creating Table Row Decoders
+
+Before connecting to SpacetimeDB, you need to create decoders for your tables. See the **[Rust to Swift Conversion Guide](RUST_TO_SWIFT_GUIDE.md)** for detailed instructions on:
+- Generating Rust module bindings
+- Understanding type mappings
+- Creating Swift table row decoders
+- Handling optional fields and complex types
+
 ### Establishing a connection
 ```swift
 import SpacetimeDB
