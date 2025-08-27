@@ -1,7 +1,7 @@
 # Claude Code Assistant Instructions
 
 ## Project Overview
-This is a Swift SDK for SpacetimeDB, a distributed database system. The SDK enables Swift applications to connect to SpacetimeDB servers, subscribe to data changes, and execute server-side reducers.
+This is a Swift SDK for SpacetimeDB, an integrated API and database system. The SDK enables Swift applications to connect to SpacetimeDB servers, subscribe to data changes, and execute server-side reducers.
 
 ## Important Context for AI Assistants
 
