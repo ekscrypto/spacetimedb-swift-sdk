@@ -6,20 +6,13 @@ This is a Swift SDK for SpacetimeDB, an integrated API and database system. The 
 ## Important Context for AI Assistants
 
 ### Current Status
-⚠️ **Alpha Release**: The SDK is functional for basic use cases but has significant gaps in protocol implementation. While core features like subscriptions and reducer calls work, several message types are unimplemented. Production use is not recommended. Before making any changes, please read the [README.md](README.md) file, specifically the "SDK Implementation Status" section for the current state of implementation, supported features, and known limitations.
+⚠️ **IMPORTANT**: Before making any changes, read the [README.md](README.md) file for:
+- Current SDK status and maturity level
+- Complete list of implemented/unimplemented features
+- Known limitations and roadmap items
+- Test coverage details
 
-**Working Features:**
-- Basic connection and authentication
-- Subscribe/SubscribeMulti for table updates
-- CallReducer for server-side functions
-- Brotli compression
-- Auto-reconnection
-
-**Missing Critical Features:**
-- Unsubscribe functionality
-- OneOffQuery support
-- Server Event handling
-- Several message types (see README for full list)
+This document focuses on **implementation details** not covered in the README.
 
 ### Key Technical Concepts
 
