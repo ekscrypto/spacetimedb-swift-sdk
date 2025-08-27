@@ -1,4 +1,10 @@
 # spacetimedb-swift-sdk
+
+[![Swift](https://github.com/ekscrypto/spacetimedb-swift-sdk/actions/workflows/swift.yml/badge.svg)](https://github.com/ekscrypto/spacetimedb-swift-sdk/actions/workflows/swift.yml)
+[![Swift Version](https://img.shields.io/badge/Swift-5.9+-orange.svg)](https://swift.org)
+[![Platform](https://img.shields.io/badge/Platforms-iOS%2015.0+%20|%20macOS%2012.0+-blue.svg)](https://developer.apple.com)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 SDK to connect to SpacetimeDB from Swift
 
 This is a community project and is not an official SDK supported by Clockwork Labs.
