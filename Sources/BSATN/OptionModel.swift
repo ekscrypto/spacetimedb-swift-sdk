@@ -5,7 +5,7 @@ import Foundation
 public struct OptionModel: SumModel {
     public static var size: UInt32 { 2 }
     public let wrappedType: AlgebraicValueType
-    
+
     public init(_ wrappedType: AlgebraicValueType) {
         self.wrappedType = wrappedType
     }

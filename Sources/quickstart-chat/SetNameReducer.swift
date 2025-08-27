@@ -13,11 +13,11 @@ import BSATN
 public struct SetNameReducer: Reducer {
     public let name = "set_name"
     public let userName: String
-    
+
     public init(userName: String) {
         self.userName = userName
     }
-    
+
     public func encodeArguments(writer: BSATNWriter) throws {
         try writer.write(userName)
     }

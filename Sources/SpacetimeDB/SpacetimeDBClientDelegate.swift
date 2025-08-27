@@ -20,7 +20,7 @@ public protocol SpacetimeDBClientDelegate: AnyObject, Sendable {
     // Called when a table has updates (deletes and/or inserts) in a single transaction
     // This allows the client to detect updates by comparing identities between deletes and inserts
     func onTableUpdate(client: SpacetimeDBClient, table: String, deletes: [Any], inserts: [Any]) async
-    
+
     // Called when the SDK receives a response after reducer execution
     // The status indicates whether the reducer was committed, failed, or ran out of energy
     // energyUsed is the amount of energy consumed by the reducer execution

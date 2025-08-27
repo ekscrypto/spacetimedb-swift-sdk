@@ -12,7 +12,7 @@ import BSATN
 public protocol Reducer {
     /// The name of the reducer as defined on the server
     var name: String { get }
-    
+
     /// Encode the reducer arguments to BSATN format
     func encodeArguments(writer: BSATNWriter) throws
 }
@@ -21,12 +21,12 @@ public protocol Reducer {
 public struct StringReducer: Reducer {
     public let name: String
     public let argument: String
-    
+
     public init(name: String, argument: String) {
         self.name = name
         self.argument = argument
     }
-    
+
     public func encodeArguments(writer: BSATNWriter) throws {
         try writer.write(argument)
     }
@@ -35,11 +35,11 @@ public struct StringReducer: Reducer {
 /// A reducer with no arguments
 public struct VoidReducer: Reducer {
     public let name: String
-    
+
     public init(name: String) {
         self.name = name
     }
-    
+
     public func encodeArguments(writer: BSATNWriter) throws {
         // No arguments to encode
     }
@@ -49,12 +49,12 @@ public struct VoidReducer: Reducer {
 public struct RawReducer: Reducer {
     public let name: String
     public let encodedArguments: Data
-    
+
     public init(name: String, encodedArguments: Data) {
         self.name = name
         self.encodedArguments = encodedArguments
     }
-    
+
     public func encodeArguments(writer: BSATNWriter) throws {
         writer.writeBytes(encodedArguments)
     }

@@ -181,3 +181,4 @@ The SDK now has comprehensive test coverage (~70%+) including:
 - **QueryUpdate** - Comprehensive query result scenarios
 
 **DO NOT USE XCTest** use the Swift Testing framework only
+**REMOVE TRAILING BLANK SPACES**

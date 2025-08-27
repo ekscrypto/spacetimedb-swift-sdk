@@ -14,12 +14,12 @@ struct UserRow {
     let identity: UInt256 // UInt256 identity
     let name: String?     // Optional name
     let online: Bool      // Online status
-    
+
     // Minimal SumModel for optional string
     struct OptionalStringSumModel: SumModel {
         static var size: UInt32 { 2 }  // 2 variants: Some(0) or None(1)
     }
-    
+
     struct Model: ProductModel {
         var definition: [AlgebraicValueType] { [
             .uint256,   // identity
@@ -27,7 +27,7 @@ struct UserRow {
             .bool       // online status
         ]}
     }
-    
+
     init(modelValues: [AlgebraicValue]) throws {
         let model = Model()
         guard modelValues.count == model.definition.count,
@@ -35,9 +35,9 @@ struct UserRow {
         else {
             throw BSATNError.invalidStructure("Invalid UserRow structure")
         }
-        
+
         self.identity = identity
-        
+
         // Handle optional name (sum type: tag 0=Some, tag 1=None)
         switch modelValues[1] {
         case .sum(tag: 0, value: let value):
@@ -52,24 +52,24 @@ struct UserRow {
         default:
             throw BSATNError.invalidStructure("Expected sum type for optional name field")
         }
-        
+
         // Handle online status
         guard case .bool(let online) = modelValues[2] else {
             throw BSATNError.invalidStructure("Expected bool for online field")
         }
         self.online = online
     }
-    
+
     /// Alternative init that reads directly from BSATNReader
     init(reader: BSATNReader) throws {
         // Read identity
         self.identity = try reader.read()
-        
+
         // Read optional name using the new readOptional method
         self.name = try reader.readOptional {
             try reader.readString()
         }
-        
+
         // Read online status
         self.online = try reader.read()
     }
@@ -77,7 +77,7 @@ struct UserRow {
 
 struct UserRowDecoder: TableRowDecoder {
     var model: ProductModel { UserRow.Model() }
-    func decode(modelValues: [AlgebraicValue]) throws -> Any { 
-        try UserRow(modelValues: modelValues) 
+    func decode(modelValues: [AlgebraicValue]) throws -> Any {
+        try UserRow(modelValues: modelValues)
     }
 }

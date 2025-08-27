@@ -20,14 +20,14 @@
 //@Test func hexRepresentation() throws {
 //    let connectionId = ConnectionId()
 //    let hexString = connectionId.hexRepresentation
-//    
+//
 //    // Verify it's exactly 32 hex digits
 //    #expect(hexString.count == 32)
-//    
+//
 //    // Verify it contains only valid hex characters
 //    let validHexCharacters = CharacterSet(charactersIn: "0123456789abcdef")
 //    #expect(CharacterSet(charactersIn: hexString).isSubset(of: validHexCharacters))
-//    
+//
 //    // Verify the hex string can be reconstructed to Data equal to rawValue
 //    var reconstructedData = Data()
 //    for i in stride(from: 0, to: hexString.count, by: 2) {

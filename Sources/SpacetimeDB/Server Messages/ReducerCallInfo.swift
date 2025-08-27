@@ -14,7 +14,7 @@ public struct ReducerCallInfo {
     public let reducerId: UInt32
     public let args: Data
     public let requestId: UInt32
-    
+
     init(reader: BSATNReader) throws {
         debugLog(">>> Reading ReducerCallInfo")
         self.reducerName = try reader.readString()

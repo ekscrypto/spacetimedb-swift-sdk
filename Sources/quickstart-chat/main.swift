@@ -6,17 +6,17 @@ extension Data {
     init?(hexString: String) {
         let hex = hexString.replacingOccurrences(of: " ", with: "")
         guard hex.count % 2 == 0 else { return nil }
-        
+
         var data = Data(capacity: hex.count / 2)
         var index = hex.startIndex
-        
+
         while index < hex.endIndex {
             let nextIndex = hex.index(index, offsetBy: 2)
             guard let byte = UInt8(hex[index..<nextIndex], radix: 16) else { return nil }
             data.append(byte)
             index = nextIndex
         }
-        
+
         self = data
     }
 }
@@ -27,13 +27,13 @@ struct TokenStorage {
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         return documentsPath.appendingPathComponent("spacetimedb_identity.json")
     }()
-    
+
     struct StoredIdentity: Codable {
         let token: String
         let identity: BSATN.UInt256
         let savedAt: Date
     }
-    
+
     static func save(token: String, identity: BSATN.UInt256) {
         let stored = StoredIdentity(token: token, identity: identity, savedAt: Date())
         do {
@@ -44,7 +44,7 @@ struct TokenStorage {
             print("⚠️ Failed to save identity: \(error)")
         }
     }
-    
+
     static func load() -> AuthenticationToken? {
         do {
             let data = try Data(contentsOf: tokenFileURL)
@@ -57,7 +57,7 @@ struct TokenStorage {
             return nil
         }
     }
-    
+
     static func clear() {
         do {
             try FileManager.default.removeItem(at: tokenFileURL)
@@ -73,7 +73,7 @@ struct QuickstartChat {
     static func showOnlineUsers(delegate: ChatClientDelegate) async {
         let users = await delegate.getAllUsers()
         let onlineUsers = users.filter { $0.online }
-        
+
         if onlineUsers.isEmpty {
             print("📊 No users currently online")
         } else {
@@ -86,18 +86,18 @@ struct QuickstartChat {
             print("")
         }
     }
-    
+
     static func startInputLoop(client: SpacetimeDBClient, delegate: ChatClientDelegate) async {
         var shouldQuit = false
-        
+
         // Wait for subscription to be ready
         while !delegate.isSubscriptionReady() {
             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
         }
-        
+
         print("\n✅ Subscription ready! You can now use commands.")
         print("💬 Type /help for available commands\n")
-        
+
         while !shouldQuit {
             // Read input from stdin
             if let input = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines), !input.isEmpty {
@@ -106,12 +106,12 @@ struct QuickstartChat {
                     let components = input.split(separator: " ", maxSplits: 1)
                     let command = String(components[0]).lowercased()
                     let argument = components.count > 1 ? String(components[1]) : nil
-                    
+
                     switch command {
                     case "/quit":
                         print("👋 Goodbye!")
                         shouldQuit = true
-                        
+
                     case "/name":
                         if let name = argument, !name.isEmpty {
                             print("📝 Setting name to: '\(name)'")
@@ -126,10 +126,10 @@ struct QuickstartChat {
                             print("⚠️  Usage: /name <your name>")
                             print("   Name cannot be empty")
                         }
-                        
+
                     case "/users":
                         await showOnlineUsers(delegate: delegate)
-                        
+
                     case "/help":
                         print("\n📖 Available Commands:")
                         print("   /quit - Exit the application")
@@ -137,7 +137,7 @@ struct QuickstartChat {
                         print("   /users - Show online users")
                         print("   /help - Show this help message")
                         print("\nOr just type any text to send a message to the chat!\n")
-                        
+
                     default:
                         print("❓ Unknown command: \(command)")
                         print("   Type /help for available commands")
@@ -155,15 +155,15 @@ struct QuickstartChat {
                     }
                 }
             }
-            
+
             // Small delay to prevent CPU spinning
             try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
         }
-        
+
         // Disconnect before exiting
         await client.disconnect()
     }
-    
+
     static func main() async {
         print("Starting SpacetimeDB Client...")
         print("SpacetimeDB Quickstart Chat Client")
@@ -171,7 +171,7 @@ struct QuickstartChat {
         print("Host: http://localhost:3000")
         print("Database: quickstart-chat")
         print("==========================================\n")
-        
+
         // Check for command line arguments
         let args = CommandLine.arguments
 
@@ -179,12 +179,12 @@ struct QuickstartChat {
             TokenStorage.clear()
             print("Identity cleared. A new identity will be created.\n")
         }
-        
+
         // Load saved token if available
         let savedToken = TokenStorage.load()
-        
+
         let delegate = ChatClientDelegate()
-        
+
         do {
             // Register before connecting
             let client = try SpacetimeDBClient(
@@ -193,12 +193,12 @@ struct QuickstartChat {
             )
             await client.registerTableRowDecoder(table: "user", decoder: UserRowDecoder())
             await client.registerTableRowDecoder(table: "message", decoder: MessageRowDecoder())
-            
+
             print("Attempting to connect...")
             try await client.connect(token: savedToken, delegate: delegate)
 
             print("\n📡 Waiting for subscription to be applied...")
-            
+
             // Start input loop (which will wait for subscription internally)
             await startInputLoop(client: client, delegate: delegate)
 
@@ -213,41 +213,41 @@ struct QuickstartChat {
 actor LocalDatabase {
     private var users: [UInt256: UserRow] = [:]
     private var messages: [MessageRow] = []
-    
+
     func addUser(_ user: UserRow) {
         users[user.identity] = user
     }
-    
+
     func removeUser(_ user: UserRow) {
         users[user.identity] = nil
     }
-    
+
     func addMessage(_ message: MessageRow) {
         messages.append(message)
         // Keep messages sorted by timestamp
         messages.sort { $0.sent < $1.sent }
     }
-    
+
     func removeMessage(_ message: MessageRow) {
         messages.removeAll { $0.sender == message.sender && $0.sent == message.sent && $0.text == message.text }
     }
-    
+
     func getUserCount() -> Int {
         return users.count
     }
-    
+
     func getMessageCount() -> Int {
         return messages.count
     }
-    
+
     func getAllUsers() -> [UserRow] {
         return Array(users.values)
     }
-    
+
     func getAllMessages() -> [MessageRow] {
         return messages
     }
-    
+
     func clear() {
         users.removeAll()
         messages.removeAll()

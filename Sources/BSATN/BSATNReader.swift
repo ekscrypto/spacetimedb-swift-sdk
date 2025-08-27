@@ -5,20 +5,20 @@ public class BSATNReader {
     private let bytes: ContiguousArray<UInt8>
     private var offset: Int = 0
     private let printDebug: ((String) -> Void)?
-    
+
     public var currentOffset: Int {
         return offset
     }
-    
+
     public var isDebugEnabled: Bool {
         return printDebug != nil
     }
-    
+
     public init(data: Data, debugEnabled: Bool = false) {
         bytes = ContiguousArray(data)
         self.printDebug = debugEnabled ? { print($0) } : nil
     }
-    
+
     /// Read a specified number of bytes
     public func readBytes(_ count: Int) throws -> ArraySlice<UInt8> {
         printDebug?(String(format: ">> %@, offset: 0x%04X, count: %d, total: %d (0x%X)", "\(#function)", offset, count, bytes.count, bytes.count))
@@ -39,7 +39,7 @@ public class BSATNReader {
         printDebug?(">> \(#function).\(#line) \(T.self) -> \(value)")
         return value
     }
-    
+
     /// Returns all remaining data from the current offset
     public func remainingData() -> Data {
         return Data(bytes[offset..<bytes.count])
@@ -50,7 +50,7 @@ public class BSATNReader {
         let byte: UInt8 = try read()
         return byte != 0
     }
-    
+
     /// Read a string prefixed with a UInt32 length
     public func readString() throws -> String {
         printDebug?(">> \(#function).\(#line)")
@@ -60,14 +60,14 @@ public class BSATNReader {
         printDebug?(">> \(#function).\(#line)")
         guard let string = String(data: Data(stringData), encoding: .utf8) else {
             throw DecodingError.dataCorrupted(
-                DecodingError.Context(codingPath: [], 
+                DecodingError.Context(codingPath: [],
                                     debugDescription: "Invalid UTF-8 data for string")
             )
         }
         printDebug?(">>> STRING: \(string)")
         return string
     }
-    
+
     /// Read an array with UInt32 count prefix
     public func readArray(elementReader: () throws -> AlgebraicValue) throws -> [AlgebraicValue] {
         printDebug?(">> \(#function).\(#line)")
@@ -80,7 +80,7 @@ public class BSATNReader {
         printDebug?(">> \(#function).\(#line)")
         return elements
     }
-    
+
     /// Read a product value (concatenated field values)
     public func readProduct(definition valueTypes: [AlgebraicValueType]) throws -> [AlgebraicValue] {
         printDebug?(">> \(#function).\(#line) \(valueTypes)")
@@ -93,7 +93,7 @@ public class BSATNReader {
         printDebug?(">> \(#function).\(#line)")
         return values
     }
-    
+
     /// Read a sum value (tag + variant data)
     public func readSum(variantReaders: [UInt8: () throws -> AlgebraicValue?]) throws -> (tag: UInt8, value: AlgebraicValue?) {
         let tag: UInt8 = try read()
@@ -157,10 +157,10 @@ public class BSATNReader {
         case .sum(let model):
             // Read the tag
             let tag: UInt8 = try read()
-            
+
             // Save current position for reading variant data
             let startOffset = offset
-            
+
             // Check if this is an Option type
             if let optionModel = model as? OptionModel {
                 // Option type: tag 0 = Some, tag 1 = None
@@ -203,17 +203,17 @@ public class BSATNReader {
             }
         }
     }
-    
+
     /// Check if there's more data to read
     public var hasMoreData: Bool {
         return offset < bytes.count
     }
-    
+
     /// Current reading position
     public var position: Int {
         return offset
     }
-    
+
     /// Skip forward by the specified number of bytes
     public func skip(_ count: Int) throws {
         guard offset + count <= bytes.count else {
@@ -221,7 +221,7 @@ public class BSATNReader {
         }
         offset += count
     }
-    
+
     /// Read an optional value
     public func readOptional<T>(readValue: () throws -> T) throws -> T? {
         let tag: UInt8 = try read()

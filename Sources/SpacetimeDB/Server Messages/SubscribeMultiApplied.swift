@@ -44,14 +44,14 @@ struct SubscribeMultiApplied {
         self.queryId = queryId
         self.update = try DatabaseUpdate(modelValues: updateValues)
     }
-    
+
     // Alternative init that reads directly from BSATNReader
     init(reader: BSATNReader) throws {
         self.requestId = try reader.read()
         self.executionDuration = try reader.read()
         self.queryId = try reader.read()
         self.update = try DatabaseUpdate(reader: reader)
-        
+
         debugLog(">>> SubscribeMultiApplied: requestId=\(requestId), queryId=\(queryId), hostExec=\(executionDuration)μs, tables=\(update.tableUpdates.count)")
     }
 }

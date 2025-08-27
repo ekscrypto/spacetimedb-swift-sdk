@@ -5,30 +5,30 @@ import Foundation
 
 @Suite("SubscribeMultiApplied Tests")
 struct SubscribeMultiAppliedTests {
-    
+
     @Test func tableIDsAreConsistent() throws {
         // Test that table IDs like 4097 (0x1001) are valid
         // These are the actual IDs assigned by SpacetimeDB
-        
+
         // Create a mock SubscribeMultiApplied with table ID 4097
         let writer = BSATNWriter()
-        
+
         // Write compression and message type
         writer.write(UInt8(0))  // no compression
         writer.write(UInt8(8))  // SubscribeMultiApplied message type
-        
+
         // Write request ID
         writer.write(UInt32(1))
-        
+
         // Write execution duration
         writer.write(UInt64(1000))  // 1000 microseconds
-        
-        // Write query ID  
+
+        // Write query ID
         writer.write(UInt32(0))
-        
+
         // Write DatabaseUpdate with 1 table
         writer.write(UInt32(1))
-        
+
         // Write TableUpdate
         writer.write(UInt32(4097))  // Table ID 0x1001
         writer.write(UInt32(7))     // String length
@@ -37,32 +37,32 @@ struct SubscribeMultiAppliedTests {
         }
         writer.write(UInt64(0))     // num rows
         writer.write(UInt32(0))     // 0 query updates
-        
+
         let data = writer.finalize()
         let reader = BSATNReader(data: data)
-        
+
         // Skip compression and message type
         let _: UInt8 = try reader.read()
         let _: UInt8 = try reader.read()
-        
+
         // Parse SubscribeMultiApplied
         let subscribeMultiApplied = try SubscribeMultiApplied(reader: reader)
-        
+
         // Verify table ID
         #expect(subscribeMultiApplied.update.tableUpdates.count == 1)
         let tableUpdate = subscribeMultiApplied.update.tableUpdates[0]
         #expect(tableUpdate.id == 4097, "Table ID 4097 (0x1001) is valid")
         #expect(tableUpdate.name == "message")
-        
+
         print("✅ Table ID 4097 is confirmed as valid")
     }
-    
+
     @Test func userTableID() throws {
         // The "user" table typically has ID 4096 (0x1000)
         let userTableId: UInt32 = 4096
         print("User table ID: \(userTableId) (0x\(String(format: "%04X", userTableId)))")
         #expect(userTableId == 0x1000)
-        
+
         // Message table would be 4097 (0x1001)
         let messageTableId: UInt32 = 4097
         print("Message table ID: \(messageTableId) (0x\(String(format: "%04X", messageTableId)))")

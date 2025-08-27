@@ -39,7 +39,7 @@ extension SpacetimeDBClient {
 
     private func processOrForwardMessage(_ data: Data) async {
         debugLog(">>> processOrForwardMessage called with \(data.count) bytes")
-        
+
         // Display hex representation of the data before processing
         if debugEnabled && data.count <= 2048 {
             print("=== Received BSATN Message ===")
@@ -51,11 +51,11 @@ extension SpacetimeDBClient {
             print("First 16 bytes: \(data.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " "))")
             print("==============================")
         }
-        
+
         // Process the BSATN message
         debugLog(">>> Creating BSATNReader with \(data.count) bytes (first byte: 0x\(String(format: "%02X", data.first ?? 0)))")
         var reader = BSATNReader(data: data, debugEnabled: debugEnabled)
-        
+
         // Read compression tag
         let compressionTag: UInt8
         do {
@@ -65,15 +65,15 @@ extension SpacetimeDBClient {
             debugLog(">>> Error reading compression tag: \(error)")
             return
         }
-        
+
         // Handle compression if needed
         if compressionTag != Tags.Compression.none.rawValue {
             debugLog(">>> Compressed message detected (compression: \(compressionTag))")
-            
+
             // The rest of the data is compressed
             let compressedData = reader.remainingData()
             var decompressedData: Data?
-            
+
             if compressionTag == Tags.Compression.brotli.rawValue {
                 debugLog(">>> Decompressing Brotli message: \(compressedData.count) bytes")
                 decompressedData = decompressBrotli(data: compressedData)
@@ -81,22 +81,22 @@ extension SpacetimeDBClient {
                 debugLog(">>> Gzip compression is not currently supported")
                 return
             }
-            
+
             guard let decompressed = decompressedData else {
                 debugLog(">>> Failed to decompress message")
                 return
             }
-            
+
             debugLog(">>> Decompressed to: \(decompressed.count) bytes")
-            
+
             // Create a new reader with the decompressed data
             reader = BSATNReader(data: decompressed, debugEnabled: debugEnabled)
         }
-        
+
         // Read message type tag
         let messageTag: UInt8 = (try? reader.read()) ?? 0
         debugLog(">>> Message type: \(messageTag)")
-        
+
         do {
             if messageTag == Tags.ServerMessage.identityToken.rawValue {
                 // Read IdentityTokenMessage
@@ -106,7 +106,7 @@ extension SpacetimeDBClient {
                     try reader.readAlgebraicValue(as: .uint128)
                 ])
                 debugLog(">>> Identity: \(identityToken)")
-                
+
                 // Store current identity
                 self.currentIdentity = identityToken.identity
                 await clientDelegate?.onIdentityReceived(client: self, token: identityToken.token, identity: identityToken.identity)
@@ -114,15 +114,15 @@ extension SpacetimeDBClient {
                 // Read SubscribeMultiApplied directly from reader
                 let subscribeMultiApplied = try SubscribeMultiApplied(reader: reader)
                 debugLog(">>> SubscribeMultiApplied: requestId=\(subscribeMultiApplied.requestId), tables=\(subscribeMultiApplied.update.tableUpdates.count)")
-                
+
                 for tableUpdate in subscribeMultiApplied.update.tableUpdates {
                     debugLog(">>> Table: \(tableUpdate.name) (id: \(tableUpdate.id), rows: \(tableUpdate.numRows))")
-                    
+
                     do {
                         let queryUpdate = try tableUpdate.getQueryUpdate()
                         debugLog(">>>   Deletes: \(queryUpdate.deletes.rows.count) rows")
                         debugLog(">>>   Inserts: \(queryUpdate.inserts.rows.count) rows")
-                        
+
                         let decoder = decoder(forTable: tableUpdate.name)
                         if let decoder {
                             // Process inserts
@@ -139,7 +139,7 @@ extension SpacetimeDBClient {
                                     debugLog(">>>     Error decoding row \(index): \(error)")
                                 }
                             }
-                            
+
                             // Process deletes
                             var deletedRows: [Any] = []
                             for (index, row) in queryUpdate.deletes.rows.enumerated() {
@@ -157,7 +157,7 @@ extension SpacetimeDBClient {
                                     debugLog(">>>     Error decoding deleted row \(index): \(error)")
                                 }
                             }
-                            
+
                             // Notify delegate
                             await clientDelegate?.onTableUpdate(
                                 client: self,
@@ -172,32 +172,32 @@ extension SpacetimeDBClient {
                         debugLog(">>>   Error parsing QueryUpdate: \(error)")
                     }
                 }
-                
+
                 // Notify delegate
                 clientDelegate?.onSubscribeMultiApplied(client: self, queryId: subscribeMultiApplied.queryId)
             } else if messageTag == Tags.ServerMessage.transactionUpdate.rawValue {
                 // Read TransactionUpdate - pass the reader directly instead of remainingData
                 debugLog(">>> Attempting to read TransactionUpdate from offset: \(reader.currentOffset)")
-                
+
                 // Create TransactionUpdate with the reader directly
                 let update = try TransactionUpdate(reader: reader)
-                
+
                 // Check if this is from another user
                 let isOwnUpdate = (update.callerIdentity.description == self.currentIdentity?.description)
                 let updateSource = isOwnUpdate ? "OWN" : "OTHER USER"
-                
+
                 debugLog(">>> TransactionUpdate from \(updateSource):")
                 debugLog(">>>   Reducer: \(update.reducerName)")
                 debugLog(">>>   Caller: \(update.callerIdentity.description.prefix(16))...")
                 debugLog(">>>   Request ID: \(update.reducerCall.requestId)")
                 debugLog(">>>   Status: \(update.eventStatusDescription)")
-                
+
                 // Notify delegate about reducer response
                 var errorMessage: String? = nil
                 if case .failed(let message) = update.status {
                     errorMessage = message
                 }
-                
+
                 await clientDelegate?.onReducerResponse(
                     client: self,
                     reducer: update.reducerName,
@@ -206,30 +206,30 @@ extension SpacetimeDBClient {
                     message: errorMessage,
                     energyUsed: update.energyQuantaUsed.used
                 )
-                
+
                 // Name changes will be detected and displayed by the delegate
                 // when it compares the cached names with the new data
-                
+
                 // Process database updates
                 for tableUpdate in update.databaseUpdate.tableUpdates {
                     debugLog(">>>   Table: \(tableUpdate.name) with \(tableUpdate.queryUpdates.count) query updates")
-                    
+
                     // Get the decoder for this table
                     let decoder = decoder(forTable: tableUpdate.name)
-                    
+
                     // Collect ALL deletes and inserts for this table across all QueryUpdates
                     var allDeletedRows: [Any] = []
                     var allInsertedRows: [Any] = []
-                    
+
                     // Process each CompressibleQueryUpdate in the table
                     for compUpdate in tableUpdate.queryUpdates {
                         guard case .uncompressed(let queryUpdate) = compUpdate else {
                             debugLog(">>>     Warning: Compressed updates not yet supported")
                             continue
                         }
-                        
+
                         debugLog(">>>     QueryUpdate: \(queryUpdate.deletes.rows.count) deletes, \(queryUpdate.inserts.rows.count) inserts")
-                        
+
                         // Debug: Check row data sizes
                         for (idx, row) in queryUpdate.deletes.rows.enumerated() {
                             debugLog(">>>       Delete row \(idx): \(row.count) bytes")
@@ -237,7 +237,7 @@ extension SpacetimeDBClient {
                         for (idx, row) in queryUpdate.inserts.rows.enumerated() {
                             debugLog(">>>       Insert row \(idx): \(row.count) bytes")
                         }
-                        
+
                         // Process deletes
                         if !queryUpdate.deletes.rows.isEmpty {
                             if let decoder {
@@ -263,7 +263,7 @@ extension SpacetimeDBClient {
                                 }
                             }
                         }
-                        
+
                         // Process inserts
                         if !queryUpdate.inserts.rows.isEmpty {
                             if let decoder {
@@ -295,7 +295,7 @@ extension SpacetimeDBClient {
                             }
                         }
                     }
-                    
+
                     // Always call the delegate if we have any rows (even if just raw data)
                     if !allDeletedRows.isEmpty || !allInsertedRows.isEmpty {
                         debugLog(">>>   Calling onTableUpdate for '\(tableUpdate.name)': \(allDeletedRows.count) deletes, \(allInsertedRows.count) inserts")
@@ -317,20 +317,20 @@ extension SpacetimeDBClient {
         let onIncomingMessage = clientDelegate?.onIncomingMessage
         await onIncomingMessage?(self, data)
     }
-    
+
     // MARK: - Hexadecimal Data Viewer
-    
+
     /// Display data in hexadecimal format (16 bytes per line with offsets)
     private func printHexData(_ data: Data) {
         let bytes = Array(data)
         let bytesPerLine = 16
         let maxBytes = 2048  // Limit hex dump to first 2KB to avoid hanging
         let bytesToPrint = min(bytes.count, maxBytes)
-        
+
         for i in stride(from: 0, to: bytesToPrint, by: bytesPerLine) {
             // Print offset in hex
             print(String(format: "0x%08X: ", i), terminator: "")
-            
+
             // Print hex bytes
             for j in 0..<bytesPerLine {
                 if i + j < bytes.count {
@@ -338,13 +338,13 @@ extension SpacetimeDBClient {
                 } else {
                     print("   ", terminator: "") // Padding for missing bytes
                 }
-                
+
                 // Add extra space between groups of 8 bytes for readability
                 if j == 7 && i + j < bytes.count {
                     print(" ", terminator: "")
                 }
             }
-            
+
             // Print ASCII representation
             print(" |", terminator: "")
             for j in 0..<bytesPerLine {
@@ -361,44 +361,44 @@ extension SpacetimeDBClient {
             }
             print("|")
         }
-        
+
         if bytes.count > maxBytes {
             print("... (truncated, showing first \(maxBytes) of \(bytes.count) bytes)")
         }
-        
+
         print(String(format: "Total bytes: %d (0x%X)", data.count, data.count))
     }
-    
+
     // MARK: - Decompression Helpers
-    
+
     /// Decompress Brotli data using native Compression framework
     private func decompressBrotli(data: Data) -> Data? {
         // Estimate decompressed size - use a much larger buffer for safety
         let decodedCapacity = max(data.count * 50, 1024 * 1024) // At least 1MB buffer
         let decodedBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: decodedCapacity)
         defer { decodedBuffer.deallocate() }
-        
+
         debugLog(">>> Attempting Brotli decompression: \(data.count) bytes -> buffer: \(decodedCapacity) bytes")
-        
+
         let decodedData: Data? = data.withUnsafeBytes { sourceBuffer in
             guard let sourcePtr = sourceBuffer.bindMemory(to: UInt8.self).baseAddress else {
                 return nil
             }
-            
+
             let decompressedSize = compression_decode_buffer(
                 decodedBuffer, decodedCapacity,
                 sourcePtr, data.count,
                 nil, COMPRESSION_BROTLI
             )
-            
-            guard decompressedSize > 0 else { 
+
+            guard decompressedSize > 0 else {
                 debugLog(">>> Brotli decompression failed, returned: \(decompressedSize)")
-                return nil 
+                return nil
             }
             debugLog(">>> Brotli decompression successful: \(decompressedSize) bytes")
             return Data(bytes: decodedBuffer, count: decompressedSize)
         }
-        
+
         return decodedData
     }
 }

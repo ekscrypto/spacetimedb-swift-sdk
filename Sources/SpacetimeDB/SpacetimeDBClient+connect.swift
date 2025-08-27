@@ -18,12 +18,12 @@ extension SpacetimeDBClient {
         guard webSocketTask == nil else {
             throw Errors.alreadyConnected
         }
-        
+
         // Store for reconnection
         self.lastToken = token
         self.shouldReconnect = enableAutoReconnect
         self.reconnectAttempts = 0
-        
+
         // Validate compression support before attempting connection
         switch compression {
         case .none:
@@ -37,7 +37,7 @@ extension SpacetimeDBClient {
             // Our minimum targets support this
             break
         }
-        
+
         guard let socketDelegate = urlSession.delegate as? WebsocketDelegate else {
             throw Errors.incompatibleUrlSessionDelegate
         }

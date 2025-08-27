@@ -13,7 +13,7 @@ public enum UpdateStatus {
     case committed(DatabaseUpdate)
     case failed(String)
     case outOfEnergy
-    
+
     public var description: String {
         switch self {
         case .committed:
@@ -24,7 +24,7 @@ public enum UpdateStatus {
             return "out of energy"
         }
     }
-    
+
     init(reader: BSATNReader) throws {
         let tag: UInt8 = try reader.read()
         debugLog(">>>   UpdateStatus tag: \(tag)")

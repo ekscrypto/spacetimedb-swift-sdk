@@ -4,14 +4,14 @@ import Testing
 
 @Suite("Compression Tests")
 struct CompressionTests {
-    
+
     @Test("Compression enum raw values")
     func compressionEnumValues() {
         #expect(Compression.none.rawValue == 0)
         #expect(Compression.gzip.rawValue == 1)
         #expect(Compression.brotli.rawValue == 2)
     }
-    
+
     @Test("Compression from raw value")
     func compressionFromRawValue() {
         #expect(Compression(rawValue: 0) == Compression.none)
@@ -19,7 +19,7 @@ struct CompressionTests {
         #expect(Compression(rawValue: 2) == Compression.brotli)
         #expect(Compression(rawValue: 3) == nil)
     }
-    
+
     @Test("Compression CaseIterable conformance")
     func compressionCaseIterable() {
         let allCases = Compression.allCases
@@ -28,14 +28,14 @@ struct CompressionTests {
         #expect(allCases.contains(.gzip))
         #expect(allCases.contains(.brotli))
     }
-    
+
     @Test("Compression equality")
     func compressionEquality() {
         #expect(Compression.none == Compression.none)
         #expect(Compression.none != Compression.gzip)
         #expect(Compression.gzip != Compression.brotli)
     }
-    
+
     @Test("Compression server string representation")
     func compressionServerString() {
         #expect(Compression.none.serverString == "None")

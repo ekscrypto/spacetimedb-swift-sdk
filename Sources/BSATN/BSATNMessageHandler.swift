@@ -25,19 +25,19 @@ public final class BSATNMessageHandler {
         let values = try reader.readProduct(definition: model.definition)
         return DecodedMessage(tag: tag, values: values)
     }
-    
+
     /// Set to true to enable hex viewing of messages
     private static var DEBUG_HEX_VIEW: Bool { true }
-    
+
     /// Display data in hexadecimal format (16 bytes per line with offsets)
     private static func printHexData(_ data: Data) {
         let bytes = Array(data)
         let bytesPerLine = 16
-        
+
         for i in stride(from: 0, to: bytes.count, by: bytesPerLine) {
             // Print offset
             print(String(format: "%08X: ", i), terminator: "")
-            
+
             // Print hex bytes
             for j in 0..<bytesPerLine {
                 if i + j < bytes.count {
@@ -45,13 +45,13 @@ public final class BSATNMessageHandler {
                 } else {
                     print("   ", terminator: "") // Padding for missing bytes
                 }
-                
+
                 // Add extra space between groups of 8 bytes for readability
                 if j == 7 && i + j < bytes.count {
                     print(" ", terminator: "")
                 }
             }
-            
+
             // Print ASCII representation
             print(" |", terminator: "")
             for j in 0..<bytesPerLine {
@@ -68,7 +68,7 @@ public final class BSATNMessageHandler {
             }
             print("|")
         }
-        
+
         print("Total bytes: \(data.count)")
     }
 }

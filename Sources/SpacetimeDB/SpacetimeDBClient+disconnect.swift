@@ -14,14 +14,14 @@ extension SpacetimeDBClient {
         if stopAutoReconnect {
             self.stopAutoReconnect()
         }
-        
+
         if let task = webSocketTask {
             task.cancel(with: .goingAway, reason: nil)
             webSocketTask = nil
         }
-        
+
         _connected = false
-        
+
         // Notify delegate
         if let delegate = clientDelegate {
             await delegate.onDisconnect(client: self)

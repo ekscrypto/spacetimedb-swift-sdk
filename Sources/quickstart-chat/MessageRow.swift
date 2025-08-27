@@ -14,7 +14,7 @@ struct MessageRow {
     let sender: UInt256 // UInt256 identity
     let sent: UInt64    // timestamp
     let text: String    // message text
-    
+
     struct Model: ProductModel {
         var definition: [AlgebraicValueType] { [
             .uint256, // sender identity
@@ -22,7 +22,7 @@ struct MessageRow {
             .string   // message text
         ]}
     }
-    
+
     init(modelValues: [AlgebraicValue]) throws {
         let model = Model()
         guard modelValues.count == model.definition.count,
@@ -32,7 +32,7 @@ struct MessageRow {
         else {
             throw BSATNError.invalidStructure("Invalid MessageRow structure")
         }
-        
+
         self.sender = sender
         self.sent = sent
         self.text = text
@@ -41,7 +41,7 @@ struct MessageRow {
 
 struct MessageRowDecoder: TableRowDecoder {
     var model: ProductModel { MessageRow.Model() }
-    func decode(modelValues: [AlgebraicValue]) throws -> Any { 
-        try MessageRow(modelValues: modelValues) 
+    func decode(modelValues: [AlgebraicValue]) throws -> Any {
+        try MessageRow(modelValues: modelValues)
     }
 }

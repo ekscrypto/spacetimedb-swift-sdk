@@ -15,7 +15,7 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
     private var userNameCache: [UInt256: String?] = [:]  // Track user names for change detection
     private var myIdentity: UInt256? = nil
     private var subscriptionReady: Bool = false
-    
+
     func onReconnecting(client: SpacetimeDBClient, attempt: Int) async {
         print("\n🔄 Attempting to reconnect... (attempt \(attempt)/10)")
     }
@@ -23,11 +23,11 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
     func onIdentityReceived(client: SpacetimeDBClient, token: String, identity: UInt256) async {
         print("🆔 Identity received: \(identity.description)...")
         TokenStorage.save(token: token, identity: identity)
-        
+
         // Store our identity hex for comparison
         myIdentity = identity
     }
-    
+
     func onSubscribeMultiApplied(client: SpacetimeDBClient, queryId: UInt32) {
         print("✅ Query applied: \(queryId)")
         subscriptionReady = true
@@ -35,22 +35,22 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
             let userCount = await database.getUserCount()
             let messageCount = await database.getMessageCount()
             print("📊 Database state: \(userCount) users, \(messageCount) messages")
-            
+
             // Display recent message history
             let messages = await database.getAllMessages()
             let recentMessages = messages.suffix(10)  // Show last 10 messages
-            
+
             if !recentMessages.isEmpty {
                 print("\n📜 Recent message history:")
                 for message in recentMessages {
                     let users = await database.getAllUsers()
                     let senderName = users.first(where: { $0.identity == message.sender })?.name ?? "Unknown"
-                    
+
                     let date = Date(timeIntervalSince1970: Double(message.sent) / 1_000_000.0)
                     let formatter = DateFormatter()
                     formatter.dateFormat = "HH:mm:ss"
                     let timeString = formatter.string(from: date)
-                    
+
                     if message.sender == myIdentity {
                         print("   [\(timeString)] You: \(message.text)")
                     } else {
@@ -60,44 +60,44 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
             }
         }
     }
-    
+
     func isSubscriptionReady() -> Bool {
         return subscriptionReady
     }
-    
+
     func getAllUsers() async -> [UserRow] {
         return await database.getAllUsers()
     }
-    
+
     func getMyIdentity() -> UInt256? {
         return myIdentity
     }
-    
+
     func onConnect(client: SpacetimeDBClient) async {
         print("\n✅ Connected to SpacetimeDB!")
         subscriptionReady = false  // Reset subscription state on reconnect
-        
+
         // Clear the local database to avoid duplicates when resubscribing
         await database.clear()
-        
+
         _ = try? await client.subscribeMulti(queries: ["SELECT * FROM user", "SELECT * FROM message"], queryId: 1)
     }
-    
+
     func onError(client: SpacetimeDBClient, error: any Error) async {
         print("\n❌ Error: \(error)")
     }
-    
+
     func onDisconnect(client: SpacetimeDBClient) async {
         print("\n⚠️  Connection lost! Will attempt to reconnect automatically...")
         subscriptionReady = false
     }
-    
+
     func onIncomingMessage(client: SpacetimeDBClient, message: Data) async {
         print("📨 Received message (\(message.count) bytes)")
-        
+
         if message.count > 0 {
             print("   First byte: 0x\(String(format: "%02X", message[0]))")
-            
+
             if message.count > 16 {
                 let preview = message.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " ")
                 print("   Preview: \(preview)...")
@@ -166,17 +166,17 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
         for row in inserts {
             if let message = row as? MessageRow {
                 await database.addMessage(message)
-                
+
                 // Look up the sender's name
                 let users = await database.getAllUsers()
                 let senderName = users.first(where: { $0.identity == message.sender })?.name ?? "Unknown"
-                
+
                 // Format the timestamp
                 let date = Date(timeIntervalSince1970: Double(message.sent) / 1_000_000.0)
                 let formatter = DateFormatter()
                 formatter.dateFormat = "HH:mm:ss"
                 let timeString = formatter.string(from: date)
-                
+
                 // Display the message (distinguish our own messages)
                 if message.sender == myIdentity {
                     print("\n➡️  [\(timeString)] You: \(message.text)")
@@ -189,7 +189,7 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
 
     func onTableUpdate(client: SpacetimeDBClient, table: String, deletes: [Any], inserts: [Any]) async {
         print("📊 Table '\(table)' update: \(deletes.count) deletes, \(inserts.count) inserts")
-        
+
         switch table {
         case "user":
             await onUserTableUdate(deletes: deletes, inserts: inserts)
@@ -198,12 +198,12 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
         default:
             print("   ⚠️  Unknown table: \(table)")
         }
-        
+
         let userCount = await database.getUserCount()
         let messageCount = await database.getMessageCount()
         print("📊 Database now has \(userCount) users, \(messageCount) messages")
     }
-    
+
     func onReducerResponse(
         client: SpacetimeDBClient,
         reducer: String,
@@ -220,7 +220,7 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
         if let message = message {
             print("   Message: \(message)")
         }
-        
+
         // Special handling for set_name reducer
         if reducer == "set_name" && status == "committed" {
             print("   ✅ Name change was successful!")

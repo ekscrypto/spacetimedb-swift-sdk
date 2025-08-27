@@ -14,7 +14,7 @@ public struct DatabaseUpdate {
     struct Model: ArrayModel {
         let definition: AlgebraicValueType = .product(TableUpdate.Model())
     }
-    
+
     public init(tableUpdates: [TableUpdate]) {
         self.tableUpdates = tableUpdates
     }
@@ -35,21 +35,21 @@ public struct DatabaseUpdate {
         }
         self.tableUpdates = updates
     }
-    
+
     // Alternative init that reads directly from BSATNReader
     init(reader: BSATNReader) throws {
         // Read array of TableUpdate
         debugLog(">>>   About to read table count at offset: \(reader.currentOffset)")
         let tableCount: UInt32 = try reader.read()
         debugLog(">>> DatabaseUpdate: \(tableCount) tables")
-        
+
         var updates: [TableUpdate] = []
         for i in 0..<tableCount {
             debugLog(">>> Reading table \(i)...")
             let tableUpdate = try TableUpdate(reader: reader)
             updates.append(tableUpdate)
         }
-        
+
         self.tableUpdates = updates
     }
 }
