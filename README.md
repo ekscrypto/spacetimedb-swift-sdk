@@ -8,8 +8,54 @@ STATUS: Alpha -- Core features working but protocol implementation incomplete. P
 
 ## Installation
 
-* Add https://github.com/ekscrypto/spacetimedb-swift-sdk.git to your Package Dependencies
-* Select the app target to link against this SDK
+### Swift Package Manager (Xcode)
+
+1. In Xcode, open your project and navigate to **File** → **Add Package Dependencies...**
+2. In the search bar, paste the repository URL:
+   ```
+   https://github.com/ekscrypto/spacetimedb-swift-sdk.git
+   ```
+3. Click **Add Package**
+4. Choose the branch/version rule:
+   - **Branch**: `main` (for latest updates)
+   - **Version**: Use a specific version tag if available
+5. Click **Add Package**
+6. Select your app target when prompted to add the package products:
+   - ✅ `SpacetimeDB` (required)
+   - ✅ `BSATN` (required)
+7. Click **Add Package**
+
+### Swift Package Manager (Package.swift)
+
+Add the dependency to your `Package.swift` file:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/ekscrypto/spacetimedb-swift-sdk.git", branch: "main")
+]
+```
+
+Then add the products to your target dependencies:
+
+```swift
+targets: [
+    .target(
+        name: "YourTarget",
+        dependencies: [
+            .product(name: "SpacetimeDB", package: "spacetimedb-swift-sdk"),
+            .product(name: "BSATN", package: "spacetimedb-swift-sdk")
+        ]
+    )
+]
+```
+
+### System Requirements
+
+- **Swift**: 5.9 or later
+- **Platforms**:
+  - iOS 15.0+ / macOS 12.0+ (for Brotli compression support)
+  - iOS 13.0+ / macOS 10.15+ (without compression)
+- **Xcode**: 15.0 or later (recommended)
 
 ## Sample Application: Quickstart Chat
 
