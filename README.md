@@ -77,6 +77,51 @@ This repository includes a fully functional chat application demonstrating Space
    ./.build/debug/quickstart-chat
    ```
 
+#### Command Line Options
+
+The chat client supports several command line options for testing and debugging:
+
+```bash
+# Basic usage
+./.build/debug/quickstart-chat
+
+# Available options:
+./.build/debug/quickstart-chat [OPTIONS]
+```
+
+**Available Options:**
+
+- **`--clear-identity`** - Clears saved authentication token and creates a new anonymous identity
+  - **Use case**: Testing with a fresh identity, debugging authentication issues
+  - **Example**: `./.build/debug/quickstart-chat --clear-identity`
+
+- **`--fetch-users-only`** - Connects, fetches all users via OneOffQuery, then exits (no subscription)
+  - **Use case**: Testing OneOffQuery functionality, debugging server connectivity without real-time updates
+  - **Example**: `./.build/debug/quickstart-chat --fetch-users-only`
+
+- **`--single`** - Uses individual Subscribe requests instead of SubscribeMulti
+  - **Use case**: Testing single subscription protocol, debugging subscription behavior, protocol development
+  - **Technical**: Sends separate `Subscribe` messages for `user` and `message` tables instead of one `SubscribeMulti`
+  - **Example**: `./.build/debug/quickstart-chat --single`
+
+- **`--no-subscribe`** - Connects without subscribing to any tables (no real-time updates)
+  - **Use case**: Testing basic connection, sending reducers without receiving table updates, debugging unsubscribe behavior
+  - **Behavior**: Can send messages and call reducers, but won't receive live updates from other clients
+  - **Example**: `./.build/debug/quickstart-chat --no-subscribe`
+
+**Example Usage Scenarios:**
+
+```bash
+# Start fresh with new identity using single subscriptions
+./.build/debug/quickstart-chat --clear-identity --single
+
+# Test connection and fetch users without subscribing
+./.build/debug/quickstart-chat --fetch-users-only
+
+# Connect as send-only client (useful for testing unsubscribe scenarios)
+./.build/debug/quickstart-chat --no-subscribe
+```
+
 ### Features
 
 The Swift chat client implements all core features from the official tutorials, plus additional enhancements:
@@ -95,10 +140,11 @@ The Swift chat client implements all core features from the official tutorials, 
 - 🎯 **User listing** - `/users` command shows all online users
 - 🎯 **OneOffQuery support** - `--fetch-users-only` fetches all users without subscription
 - 🎯 **Subscription management** - `/sub` and `/unsub` commands with full unsubscribe functionality
+- 🎯 **Subscription testing** - `--single` uses individual Subscribe requests for protocol testing
+- 🎯 **Non-subscription mode** - `--no-subscribe` connects without real-time updates for testing
 - 🎯 **Subscription readiness** - Waits for data sync before accepting commands
 - 🎯 **Token persistence** - Maintains identity across sessions (use `--clear-identity` to reset)
 - 🎯 **Automatic reconnection** - Reconnects with exponential backoff on connection loss
-- 🎯 **Debug mode** - Enable detailed logging with `--debug` flag
 
 #### Available Commands
 - `/help` - Show available commands
