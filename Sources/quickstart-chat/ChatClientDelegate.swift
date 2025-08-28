@@ -9,13 +9,27 @@ import Foundation
 import SpacetimeDB
 import BSATN
 
+enum SubscriptionStatus {
+    case unsubscribedMulti
+    case subscribedMulti(requestId: UInt32)
+    case unsubscribedSingle
+    case subscribedSingle(userRequestId: UInt32, messageRequestId: UInt32)
+}
+
 final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
     private let database = LocalDatabase()
     private var pendingReducer: String? = nil
     private var userNameCache: [UInt256: String?] = [:]  // Track user names for change detection
     private var myIdentity: UInt256? = nil
     private var subscriptionReady: Bool = false
-    private var activeSubscription: UInt32? = nil
+    private var subscriptionStatus: SubscriptionStatus = .unsubscribedMulti
+    private let autoSubscribe: Bool
+    private var isIntentionalDisconnect: Bool = false
+
+    init(useSingleSubscriptions: Bool = false, autoSubscribe: Bool = true) {
+        subscriptionStatus = useSingleSubscriptions ? .unsubscribedSingle : .unsubscribedMulti
+        self.autoSubscribe = autoSubscribe
+    }
 
     func onReconnecting(client: SpacetimeDBClient, attempt: Int) async {
         print("\n🔄 Attempting to reconnect... (attempt \(attempt)/10)")
@@ -27,12 +41,35 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
 
         // Store our identity hex for comparison
         myIdentity = identity
+
+        // Auto-subscribe based on the subscription mode (if enabled)
+        if autoSubscribe {
+            switch subscriptionStatus {
+            case .unsubscribedSingle:
+                do {
+                    _ = try await subscribe(client: client)
+                } catch {
+                    print("❌ Failed to auto-subscribe in single mode: \(error)")
+                }
+            case .unsubscribedMulti:
+                do {
+                    _ = try await subscribe(client: client)
+                } catch {
+                    print("❌ Failed to auto-subscribe in multi mode: \(error)")
+                }
+            case .subscribedSingle, .subscribedMulti:
+                // Already subscribed, no action needed
+                break
+            }
+        } else {
+            print("🚫 Auto-subscription disabled - no subscriptions will be created")
+        }
     }
 
     func onSubscribeMultiApplied(client: SpacetimeDBClient, queryId: UInt32) {
-        print("✅ Query applied: \(queryId)")
+        print("✅ Multi subscription applied: \(queryId)")
         subscriptionReady = true
-        activeSubscription = queryId
+        subscriptionStatus = .subscribedMulti(requestId: queryId)
         Task {
             let userCount = await database.getUserCount()
             let messageCount = await database.getMessageCount()
@@ -63,6 +100,20 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
         }
     }
 
+    func onSubscribeApplied(client: SpacetimeDBClient, queryId: UInt32) {
+        print("✅ Single subscription applied: \(queryId)")
+        
+        // Track single subscriptions - InitialSubscription contains all tables from both requests
+        switch subscriptionStatus {
+        case .unsubscribedSingle:
+            // InitialSubscription received, covers both user and message subscriptions
+            subscriptionStatus = .subscribedSingle(userRequestId: 1, messageRequestId: 2)
+            subscriptionReady = true
+        default:
+            print("⚠️ Received single subscription applied but not in single mode")
+        }
+    }
+
     func isSubscriptionReady() -> Bool {
         return subscriptionReady
     }
@@ -74,16 +125,25 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
     func getMyIdentity() -> UInt256? {
         return myIdentity
     }
+    
+    func setIntentionalDisconnect() {
+        isIntentionalDisconnect = true
+    }
 
     func onConnect(client: SpacetimeDBClient) async {
         print("\n✅ Connected to SpacetimeDB!")
         subscriptionReady = false  // Reset subscription state on reconnect
+        
+        // Reset subscription status to unsubscribed state
+        switch subscriptionStatus {
+        case .subscribedMulti, .unsubscribedMulti:
+            subscriptionStatus = .unsubscribedMulti
+        case .subscribedSingle, .unsubscribedSingle:
+            subscriptionStatus = .unsubscribedSingle
+        }
 
         // Clear the local database to avoid duplicates when resubscribing
         await database.clear()
-
-        let queryId = await client.nextQueryId
-        _ = try? await client.subscribeMulti(queries: ["SELECT * FROM user", "SELECT * FROM message"], queryId: queryId)
     }
 
     func onError(client: SpacetimeDBClient, error: any Error) async {
@@ -91,9 +151,21 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
     }
 
     func onDisconnect(client: SpacetimeDBClient) async {
-        print("\n⚠️  Connection lost! Will attempt to reconnect automatically...")
+        if !isIntentionalDisconnect {
+            print("\n⚠️  Connection lost! Will attempt to reconnect automatically...")
+        }
         subscriptionReady = false
-        activeSubscription = nil
+        
+        // Reset subscription status to unsubscribed state
+        switch subscriptionStatus {
+        case .subscribedMulti, .unsubscribedMulti:
+            subscriptionStatus = .unsubscribedMulti
+        case .subscribedSingle, .unsubscribedSingle:
+            subscriptionStatus = .unsubscribedSingle
+        }
+        
+        // Reset the flag for future connections
+        isIntentionalDisconnect = false
     }
 
     func onIncomingMessage(client: SpacetimeDBClient, message: Data) async {
@@ -233,31 +305,104 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
 
     func onUnsubscribeApplied(client: SpacetimeDBClient, queryId: UInt32) async {
         print("✅ Unsubscribe applied: \(queryId)")
-        if activeSubscription == queryId {
-            activeSubscription = nil
-            subscriptionReady = false
-            await database.clear()
-            print("📊 Local database cleared due to unsubscribe")
+        
+        switch subscriptionStatus {
+        case .subscribedMulti(let requestId):
+            if requestId == queryId {
+                subscriptionStatus = .unsubscribedMulti
+                subscriptionReady = false
+                await database.clear()
+                print("📊 Local database cleared due to multi unsubscribe")
+            }
+        case .subscribedSingle(let userRequestId, let messageRequestId):
+            if userRequestId == queryId || messageRequestId == queryId {
+                // One of the single subscriptions was unsubscribed
+                if userRequestId == queryId && messageRequestId == queryId {
+                    // Both unsubscribed (shouldn't happen simultaneously but handle it)
+                    subscriptionStatus = .unsubscribedSingle
+                    subscriptionReady = false
+                    await database.clear()
+                    print("📊 Local database cleared due to single unsubscribe")
+                } else if userRequestId == queryId {
+                    // User subscription unsubscribed, wait for message unsubscribe
+                    subscriptionStatus = .subscribedSingle(userRequestId: 0, messageRequestId: messageRequestId)
+                } else {
+                    // Message subscription unsubscribed, wait for user unsubscribe  
+                    subscriptionStatus = .subscribedSingle(userRequestId: userRequestId, messageRequestId: 0)
+                }
+                
+                // Check if both are now 0 (fully unsubscribed)
+                if case .subscribedSingle(let userReq, let msgReq) = subscriptionStatus, 
+                   userReq == 0 && msgReq == 0 {
+                    subscriptionStatus = .unsubscribedSingle
+                    subscriptionReady = false
+                    await database.clear()
+                    print("📊 Local database cleared due to complete single unsubscribe")
+                }
+            }
+        default:
+            print("⚠️ Received unsubscribe applied but not in expected state")
         }
     }
 
     func getActiveSubscription() -> UInt32? {
-        return activeSubscription
+        switch subscriptionStatus {
+        case .subscribedMulti(let requestId):
+            return requestId
+        case .subscribedSingle(let userRequestId, _):
+            return userRequestId
+        default:
+            return nil
+        }
     }
 
     func subscribe(client: SpacetimeDBClient) async throws -> UInt32 {
-        let queryId = await client.nextQueryId
-        _ = try await client.subscribeMulti(queries: ["SELECT * FROM user", "SELECT * FROM message"], queryId: queryId)
-        print("📡 Subscription request sent with queryId: \(queryId)")
-        return queryId
+        switch subscriptionStatus {
+        case .unsubscribedSingle:
+            // Send two separate single subscriptions
+            let userQueryId = await client.nextQueryId
+            let messageQueryId = await client.nextQueryId
+            
+            _ = try await client.subscribe(queries: ["SELECT * FROM user"], requestId: userQueryId)
+            print("📡 Single subscription request sent for 'user' table with queryId: \(userQueryId)")
+            
+            _ = try await client.subscribe(queries: ["SELECT * FROM message"], requestId: messageQueryId)
+            print("📡 Single subscription request sent for 'message' table with queryId: \(messageQueryId)")
+            
+            // Return the first queryId for compatibility
+            return userQueryId
+            
+        case .unsubscribedMulti:
+            // Use multi-subscription as before
+            let queryId = await client.nextQueryId
+            _ = try await client.subscribeMulti(queries: ["SELECT * FROM user", "SELECT * FROM message"], queryId: queryId)
+            print("📡 Multi-subscription request sent with queryId: \(queryId)")
+            return queryId
+            
+        case .subscribedSingle, .subscribedMulti:
+            print("⚠️ Already subscribed, ignoring subscribe request")
+            return getActiveSubscription() ?? 0
+        }
     }
 
     func unsubscribe(client: SpacetimeDBClient) async throws {
-        guard let queryId = activeSubscription else {
+        switch subscriptionStatus {
+        case .subscribedSingle(let userRequestId, let messageRequestId):
+            if userRequestId > 0 {
+                try await client.unsubscribeSingle(queryId: userRequestId)
+                print("📡 Single unsubscribe request sent for user queryId: \(userRequestId)")
+            }
+            if messageRequestId > 0 {
+                try await client.unsubscribeSingle(queryId: messageRequestId)
+                print("📡 Single unsubscribe request sent for message queryId: \(messageRequestId)")
+            }
+            
+        case .subscribedMulti(let requestId):
+            try await client.unsubscribe(queryId: requestId)
+            print("📡 Multi-unsubscribe request sent for queryId: \(requestId)")
+            
+        case .unsubscribedSingle, .unsubscribedMulti:
             print("⚠️ No active subscription to unsubscribe from")
-            return
         }
-        try await client.unsubscribe(queryId: queryId)
-        print("📡 Unsubscribe request sent for queryId: \(queryId)")
     }
 }

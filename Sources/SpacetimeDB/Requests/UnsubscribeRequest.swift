@@ -19,3 +19,20 @@ struct UnsubscribeMultiRequest {
         return writer.finalize()
     }
 }
+
+struct UnsubscribeRequest {
+    let requestId: UInt32
+    let queryId: UInt32
+
+    init(requestId: UInt32, queryId: UInt32) {
+        self.requestId = requestId
+        self.queryId = queryId
+    }
+
+    func encode() throws -> Data {
+        let writer = BSATNWriter()
+        writer.write(requestId)
+        writer.write(queryId)
+        return writer.finalize()
+    }
+}

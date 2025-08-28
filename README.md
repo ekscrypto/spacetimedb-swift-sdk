@@ -94,7 +94,7 @@ The Swift chat client implements all core features from the official tutorials, 
 - 🎯 **Message distinction** - Your messages display differently from others
 - 🎯 **User listing** - `/users` command shows all online users
 - 🎯 **OneOffQuery support** - `--fetch-users-only` fetches all users without subscription
-- 🎯 **Subscription management** - `/sub` and `/unsub` commands for testing subscription lifecycle
+- 🎯 **Subscription management** - `/sub` and `/unsub` commands with full unsubscribe functionality
 - 🎯 **Subscription readiness** - Waits for data sync before accepting commands
 - 🎯 **Token persistence** - Maintains identity across sessions (use `--clear-identity` to reset)
 - 🎯 **Automatic reconnection** - Reconnects with exponential backoff on connection loss
@@ -237,8 +237,10 @@ if let error = result.error {
 - **OneOffQuery**: Execute single queries without subscription
 - **ConnectionInit**: Initial connection setup with authentication
 
+##### ✅ Implemented
+- **Unsubscribe**: Remove single subscriptions
+
 ##### ❌ Not Implemented
-- **Unsubscribe**: Remove single subscriptions (UnsubscribeMulti is implemented)
 - **RegisterTimer**: Schedule recurring operations
 
 #### Server → Client Messages
@@ -255,9 +257,9 @@ if let error = result.error {
 - **CompressibleQueryUpdate**: Wrapper for compression support (parsing only)
 - **OneOffQueryResponse**: Response to one-off queries
 
-##### ⚠️ Partially Implemented
-- **SubscribeApplied**: Single subscription confirmation (untested)
-- **UnsubscribeApplied**: Single unsubscription confirmation (untested)
+##### ✅ Implemented
+- **SubscribeApplied**: Single subscription confirmation
+- **UnsubscribeApplied**: Single unsubscription confirmation
 
 ##### ❌ Not Implemented
 - **Event**: Server-side event notifications
@@ -292,6 +294,10 @@ if let error = result.error {
 - `onReconnecting`: Reconnection attempt in progress
 - `onOneOffQueryResponse`: One-off query results
 
+##### ✅ Implemented
+- `onSubscribeApplied`: Single subscription ready
+- `onUnsubscribeApplied`: Single unsubscription complete
+
 ##### ❌ Not Implemented
 - `onEvent`: Server event notifications
 
@@ -320,7 +326,7 @@ The SDK now has comprehensive unit test coverage (92 tests) for all major compon
 
 1. **Gzip Compression**: Gzip compression is not supported (Brotli and uncompressed work)
 2. **Large Messages**: No streaming support for very large messages
-3. **Single Subscriptions**: Cannot unsubscribe from single queries (only multi-query unsubscribe)
+3. **Server Events**: No support for server-side event notifications
 4. **Timers**: No support for server-side scheduled operations
 5. **Non-String Map Keys**: Maps/Dictionaries with non-String keys need more testing
 
@@ -334,9 +340,9 @@ The SDK now has comprehensive unit test coverage (92 tests) for all major compon
 - [x] ~~Implement multi-query unsubscribe functionality~~ ✅ Completed
 - [x] ~~Add one-off query support~~ ✅ Completed
 - [x] ~~Comprehensive unit tests for all protocol messages~~ ✅ Completed (92 tests)
+- [x] ~~Implement single-query unsubscribe~~ ✅ Completed
 - [ ] Implement server event handling
 - [ ] Support for timer registration
-- [ ] Implement single-query unsubscribe (Unsubscribe vs UnsubscribeMulti)
 - [ ] Performance optimizations for large datasets
 - [ ] SwiftUI property wrappers for reactive updates
 - [ ] End-to-end integration tests

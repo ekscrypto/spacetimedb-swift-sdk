@@ -15,6 +15,7 @@ public protocol SpacetimeDBClientDelegate: AnyObject, Sendable {
     func onReconnecting(client: SpacetimeDBClient, attempt: Int) async
     func onIncomingMessage(client: SpacetimeDBClient, message: Data) async
     func onSubscribeMultiApplied(client: SpacetimeDBClient, queryId: UInt32)
+    func onSubscribeApplied(client: SpacetimeDBClient, queryId: UInt32)
     func onIdentityReceived(client: SpacetimeDBClient, token: String, identity: BSATN.UInt256) async
 
     // Called when a table has updates (deletes and/or inserts) in a single transaction
@@ -40,6 +41,10 @@ public extension SpacetimeDBClientDelegate {
     }
     
     func onUnsubscribeApplied(client: SpacetimeDBClient, queryId: UInt32) async {
+        // Default empty implementation
+    }
+    
+    func onSubscribeApplied(client: SpacetimeDBClient, queryId: UInt32) {
         // Default empty implementation
     }
 }

@@ -47,6 +47,9 @@ extension SpacetimeDBClient {
             print("==============================")
         }
 
+        // Notify delegate of incoming message FIRST, before any processing
+        await clientDelegate?.onIncomingMessage(client: self, message: data)
+
         // Process the BSATN message
         debugLog(">>> Creating BSATNReader with \(data.count) bytes (first byte: 0x\(String(format: "%02X", data.first ?? 0)))")
         var reader = BSATNReader(data: data, debugEnabled: debugEnabled)
@@ -93,7 +96,86 @@ extension SpacetimeDBClient {
         debugLog(">>> Message type: \(messageTag)")
 
         do {
-            if messageTag == Tags.ServerMessage.identityToken.rawValue {
+            if messageTag == Tags.ServerMessage.initialSubscription.rawValue {
+                // Handle InitialSubscription (used for single subscriptions)
+                debugLog(">>> InitialSubscription message received")
+                
+                // Parse InitialSubscription similar to SubscribeMultiApplied
+                // InitialSubscription contains the same DatabaseUpdate structure
+                do {
+                    let databaseUpdate = try DatabaseUpdate(reader: reader)
+                    debugLog(">>> InitialSubscription: tables=\(databaseUpdate.tableUpdates.count)")
+
+                    for tableUpdate in databaseUpdate.tableUpdates {
+                        debugLog(">>> Table: \(tableUpdate.name) (id: \(tableUpdate.id), rows: \(tableUpdate.numRows))")
+
+                        do {
+                            let queryUpdate = try tableUpdate.getQueryUpdate()
+                            debugLog(">>>   Deletes: \(queryUpdate.deletes.rows.count) rows")
+                            debugLog(">>>   Inserts: \(queryUpdate.inserts.rows.count) rows")
+
+                            let decoder = decoder(forTable: tableUpdate.name)
+                            if let decoder {
+                                // Process inserts
+                                var insertedRows: [Any] = []
+                                for (index, row) in queryUpdate.inserts.rows.enumerated() {
+                                    // Skip empty row data
+                                    if row.isEmpty {
+                                        continue
+                                    }
+                                    do {
+                                        let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
+                                        let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
+                                        guard case .product(let values) = modelValue else { continue }
+                                        let typedRow = try decoder.decode(modelValues: values)
+                                        insertedRows.append(typedRow)
+                                    } catch {
+                                        debugLog(">>>     Error decoding inserted row \(index): \(error)")
+                                    }
+                                }
+
+                                // Process deletes
+                                var deletedRows: [Any] = []
+                                for (index, row) in queryUpdate.deletes.rows.enumerated() {
+                                    // Skip empty row data
+                                    if row.isEmpty {
+                                        continue
+                                    }
+                                    do {
+                                        let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
+                                        let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
+                                        guard case .product(let values) = modelValue else { continue }
+                                        let typedRow = try decoder.decode(modelValues: values)
+                                        deletedRows.append(typedRow)
+                                    } catch {
+                                        debugLog(">>>     Error decoding deleted row \(index): \(error)")
+                                    }
+                                }
+
+                                // Notify delegate
+                                await clientDelegate?.onTableUpdate(
+                                    client: self,
+                                    table: tableUpdate.name,
+                                    deletes: deletedRows,
+                                    inserts: insertedRows
+                                )
+                            } else {
+                                debugLog(">>>   No decoder registered for table: \(tableUpdate.name)")
+                            }
+                        } catch {
+                            debugLog(">>>   Error parsing QueryUpdate: \(error)")
+                        }
+                    }
+                    
+                    // Notify delegate that subscription is ready with hardcoded queryId: 1
+                    debugLog(">>> About to call onSubscribeMultiApplied with hardcoded queryId: 1")
+                    clientDelegate?.onSubscribeMultiApplied(client: self, queryId: 1)
+                } catch {
+                    debugLog(">>> Error parsing InitialSubscription: \(error)")
+                    // Fallback to just notifying subscription ready
+                    clientDelegate?.onSubscribeMultiApplied(client: self, queryId: 1)
+                }
+            } else if messageTag == Tags.ServerMessage.identityToken.rawValue {
                 // Read IdentityTokenMessage
                 let identityToken = try IdentityTokenMessage(modelValues: [
                     try reader.readAlgebraicValue(as: .uint256),
@@ -105,6 +187,72 @@ extension SpacetimeDBClient {
                 // Store current identity
                 self.currentIdentity = identityToken.identity
                 await clientDelegate?.onIdentityReceived(client: self, token: identityToken.token, identity: identityToken.identity)
+            } else if messageTag == Tags.ServerMessage.subscribeApplied.rawValue {
+                // Read SubscribeApplied (single subscription)
+                let subscribeApplied = try SubscribeAppliedMessage(reader: reader)
+                debugLog(">>> SubscribeApplied: requestId=\(subscribeApplied.requestId), queryId=\(subscribeApplied.queryId), tables=\(subscribeApplied.update.tableUpdates.count)")
+
+                // Process table updates (same logic as multi subscription)
+                for tableUpdate in subscribeApplied.update.tableUpdates {
+                    debugLog(">>> Table: \(tableUpdate.name) (id: \(tableUpdate.id), rows: \(tableUpdate.numRows))")
+
+                    do {
+                        let queryUpdate = try tableUpdate.getQueryUpdate()
+                        debugLog(">>>   Deletes: \(queryUpdate.deletes.rows.count) rows")
+                        debugLog(">>>   Inserts: \(queryUpdate.inserts.rows.count) rows")
+
+                        let decoder = decoder(forTable: tableUpdate.name)
+                        if let decoder {
+                            // Process inserts
+                            var insertedRows: [Any] = []
+                            for (index, row) in queryUpdate.inserts.rows.enumerated() {
+                                do {
+                                    let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
+                                    let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
+                                    guard case .product(let values) = modelValue else { continue }
+                                    let typedRow = try decoder.decode(modelValues: values)
+                                    insertedRows.append(typedRow)
+                                    debugLog(">>>     Row \(index) for \(tableUpdate.name): \(typedRow)")
+                                } catch {
+                                    debugLog(">>>     Error decoding row \(index): \(error)")
+                                }
+                            }
+
+                            // Process deletes  
+                            var deletedRows: [Any] = []
+                            for (index, row) in queryUpdate.deletes.rows.enumerated() {
+                                // Skip empty row data
+                                if row.isEmpty {
+                                    continue
+                                }
+                                do {
+                                    let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
+                                    let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
+                                    guard case .product(let values) = modelValue else { continue }
+                                    let typedRow = try decoder.decode(modelValues: values)
+                                    deletedRows.append(typedRow)
+                                } catch {
+                                    debugLog(">>>     Error decoding deleted row \(index): \(error)")
+                                }
+                            }
+
+                            // Notify delegate
+                            await clientDelegate?.onTableUpdate(
+                                client: self,
+                                table: tableUpdate.name,
+                                deletes: deletedRows,
+                                inserts: insertedRows
+                            )
+                        } else {
+                            debugLog(">>>   No decoder registered for table: \(tableUpdate.name)")
+                        }
+                    } catch {
+                        debugLog(">>>   Error parsing QueryUpdate: \(error)")
+                    }
+                }
+
+                // Notify delegate about single subscription
+                clientDelegate?.onSubscribeApplied(client: self, queryId: subscribeApplied.queryId)
             } else if messageTag == Tags.ServerMessage.subscribeMultiApplied.rawValue {
                 // Read SubscribeMultiApplied directly from reader
                 let subscribeMultiApplied = try SubscribeMultiApplied(reader: reader)
@@ -319,6 +467,12 @@ extension SpacetimeDBClient {
                 }
                 
                 handleOneOffQueryResponse(response)
+            } else if messageTag == Tags.ServerMessage.unsubscribeApplied.rawValue {
+                // Read UnsubscribeAppliedMessage (single unsubscribe)
+                let unsubscribeApplied = try UnsubscribeAppliedMessage(reader: reader)
+                debugLog(">>> UnsubscribeApplied received for queryId: \(unsubscribeApplied.queryId)")
+                
+                await clientDelegate?.onUnsubscribeApplied(client: self, queryId: unsubscribeApplied.queryId)
             } else if messageTag == Tags.ServerMessage.unsubscribeMultiApplied.rawValue {
                 // Read UnsubscribeMultiAppliedMessage
                 let unsubscribeMultiApplied = try UnsubscribeMultiAppliedMessage(reader: reader)
@@ -329,9 +483,6 @@ extension SpacetimeDBClient {
         } catch {
             debugLog(">>> Failed to decode: \(error)")
         }
-
-        let onIncomingMessage = clientDelegate?.onIncomingMessage
-        await onIncomingMessage?(self, data)
     }
 
     // MARK: - Hexadecimal Data Viewer

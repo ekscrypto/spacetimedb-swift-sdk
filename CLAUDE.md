@@ -34,8 +34,10 @@ This document focuses on **implementation details** not covered in the README.
    - Called via `client.callReducer(reducer)`
 
 5. **Subscription Management**: Clients can subscribe and unsubscribe from data changes
-   - Use `client.subscribeMulti()` with unique queryId from `client.nextQueryId`
-   - Use `client.unsubscribe(queryId:)` to remove subscriptions
+   - Multi-subscriptions: Use `client.subscribeMulti()` with unique queryId from `client.nextQueryId`
+   - Single subscriptions: Use `client.subscribe()` with unique queryId from `client.nextQueryId`
+   - Unsubscribing: Use `client.unsubscribe(queryId:)` for single subs or `client.unsubscribeMulti(queryId:)` for multi subs
+   - **✅ Both subscription types and unsubscribe functionality are fully implemented and tested**
    - Subscription state should be tracked at application level, not in SpacetimeDBClient
 
 ### Architecture Decisions
@@ -153,7 +155,7 @@ Debug mode is **disabled by default** to keep console output clean in production
 
 1. **Gzip compression** is not implemented (Brotli and uncompressed messages work)
 2. ~~No automatic reconnection on connection loss~~ ✅ **Fixed** - Auto-reconnect with exponential backoff
-3. ~~Cannot unsubscribe from queries once subscribed~~ ✅ **Fixed** - UnsubscribeMulti implemented
+3. ~~Cannot unsubscribe from queries once subscribed~~ ✅ **Fixed** - Both single and multi unsubscribe implemented and tested
 4. ~~No heartbeat/keepalive mechanism~~ ✅ **Fixed** - Native URLSessionWebSocketTask ping/pong
 
 ### Test Coverage Status

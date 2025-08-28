@@ -114,12 +114,10 @@ struct QuickstartChat {
         print("🔍 Fetching users using OneOffQuery...")
         
         do {
-            // Create client with debug enabled and no compression for easier debugging
+            // Create client for one-off query
             let client = try SpacetimeDBClient(
                 host: "http://localhost:3000",
-                db: "quickstart-chat",
-                compression: .none,
-                debugEnabled: true
+                db: "quickstart-chat"
             )
             
             // Register the UserRowDecoder before connecting
@@ -200,16 +198,21 @@ struct QuickstartChat {
         }
     }
 
-    static func startInputLoop(client: SpacetimeDBClient, delegate: ChatClientDelegate) async {
+    static func startInputLoop(client: SpacetimeDBClient, delegate: ChatClientDelegate, waitForSubscription: Bool = true) async {
         var shouldQuit = false
 
-        // Wait for subscription to be ready
-        while !delegate.isSubscriptionReady() {
-            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
-        }
+        if waitForSubscription {
+            // Wait for subscription to be ready
+            while !delegate.isSubscriptionReady() {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            }
 
-        print("\n✅ Subscription ready! You can now use commands.")
-        print("💬 Type /help for available commands\n")
+            print("\n✅ Subscription ready! You can now use commands.")
+            print("💬 Type /help for available commands\n")
+        } else {
+            print("\n✅ Connected without subscriptions! You can use commands.")
+            print("💬 Type /help for available commands (note: no table data will be received)\n")
+        }
 
         while !shouldQuit {
             // Read input from stdin
@@ -223,6 +226,7 @@ struct QuickstartChat {
                     switch command {
                     case "/quit":
                         print("👋 Goodbye!")
+                        delegate.setIntentionalDisconnect()
                         shouldQuit = true
 
                     case "/name":
@@ -319,10 +323,20 @@ struct QuickstartChat {
             return
         }
 
+        let useSingleSubs = args.contains("--single")
+        if useSingleSubs {
+            print("🔀 Using single subscriptions instead of multi-subscriptions\n")
+        }
+
+        let noSubscribe = args.contains("--no-subscribe")
+        if noSubscribe {
+            print("🚫 Auto-subscription disabled - will not subscribe to any tables\n")
+        }
+
         // Load saved token if available
         let savedToken = TokenStorage.load()
 
-        let delegate = ChatClientDelegate()
+        let delegate = ChatClientDelegate(useSingleSubscriptions: useSingleSubs, autoSubscribe: !noSubscribe)
 
         do {
             // Register before connecting
@@ -336,10 +350,12 @@ struct QuickstartChat {
             print("Attempting to connect...")
             try await client.connect(token: savedToken, delegate: delegate)
 
-            print("\n📡 Waiting for subscription to be applied...")
+            if !noSubscribe {
+                print("\n📡 Waiting for subscription to be applied...")
+            }
 
-            // Start input loop (which will wait for subscription internally)
-            await startInputLoop(client: client, delegate: delegate)
+            // Start input loop (which will wait for subscription internally unless disabled)
+            await startInputLoop(client: client, delegate: delegate, waitForSubscription: !noSubscribe)
 
         } catch {
             print("\n❌ Fatal Error: \(error)")
