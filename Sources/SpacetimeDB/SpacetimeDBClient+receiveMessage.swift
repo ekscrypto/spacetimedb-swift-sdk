@@ -41,14 +41,9 @@ extension SpacetimeDBClient {
         debugLog(">>> processOrForwardMessage called with \(data.count) bytes")
 
         // Display hex representation of the data before processing
-        if debugEnabled && data.count <= 2048 {
+        if debugEnabled {
             print("=== Received BSATN Message ===")
             printHexData(data)
-            print("==============================")
-        } else if debugEnabled {
-            print("=== Received Large BSATN Message ===")
-            print("Size: \(data.count) bytes (hex dump skipped)")
-            print("First 16 bytes: \(data.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " "))")
             print("==============================")
         }
 
@@ -309,6 +304,27 @@ extension SpacetimeDBClient {
                         debugLog(">>>   No rows to report for table '\(tableUpdate.name)'")
                     }
                 }
+            } else if messageTag == Tags.ServerMessage.oneOffQueryResponse.rawValue {
+                // Read OneOffQueryResponse
+                let response = try OneOffQueryResponse(reader: reader)
+                debugLog(">>> OneOffQueryResponse received for messageId: \(response.messageId.map { String(format: "%02X", $0) }.joined())")
+                
+                if let error = response.error {
+                    debugLog(">>> Query error: \(error)")
+                } else {
+                    debugLog(">>> Query successful with \(response.tables.count) tables")
+                    for table in response.tables {
+                        debugLog(">>>   Table: \(table.name) with \(table.rows.count) rows")
+                    }
+                }
+                
+                handleOneOffQueryResponse(response)
+            } else if messageTag == Tags.ServerMessage.unsubscribeMultiApplied.rawValue {
+                // Read UnsubscribeMultiAppliedMessage
+                let unsubscribeMultiApplied = try UnsubscribeMultiAppliedMessage(reader: reader)
+                debugLog(">>> UnsubscribeMultiApplied received for queryId: \(unsubscribeMultiApplied.queryId)")
+                
+                await clientDelegate?.onUnsubscribeApplied(client: self, queryId: unsubscribeMultiApplied.queryId)
             }
         } catch {
             debugLog(">>> Failed to decode: \(error)")
@@ -324,7 +340,7 @@ extension SpacetimeDBClient {
     private func printHexData(_ data: Data) {
         let bytes = Array(data)
         let bytesPerLine = 16
-        let maxBytes = 2048  // Limit hex dump to first 2KB to avoid hanging
+        let maxBytes = 16384  // Limit hex dump to first 16KB for debugging
         let bytesToPrint = min(bytes.count, maxBytes)
 
         for i in stride(from: 0, to: bytesToPrint, by: bytesPerLine) {

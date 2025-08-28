@@ -8,7 +8,7 @@
 import Foundation
 import BSATN
 
-public struct DatabaseUpdate {
+public struct DatabaseUpdate: Sendable {
     public let tableUpdates: [TableUpdate]
 
     struct Model: ArrayModel {

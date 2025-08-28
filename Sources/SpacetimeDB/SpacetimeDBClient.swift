@@ -86,6 +86,12 @@ public actor SpacetimeDBClient {
     }
     private var _nextRequestId: UInt32 = 0
 
+    public var nextQueryId: UInt32 {
+        _nextQueryId += 1
+        return _nextQueryId
+    }
+    private var _nextQueryId: UInt32 = 0
+
     internal var uniqueSocketKey: String {
         let activeSocketKeyBytes = (0..<16).map { _ in UInt8.random(in: 0...255) }
         return Data(activeSocketKeyBytes).base64EncodedString()
@@ -93,12 +99,15 @@ public actor SpacetimeDBClient {
 
     // Table Row Decoders
     private var tableRowDecoders: [String: TableRowDecoder] = [:]
+    
+    // OneOffQuery Management
+    internal var pendingOneOffQueries: [Data: CheckedContinuation<OneOffQueryResult, Error>] = [:]
 
     public func registerTableRowDecoder(table: String, decoder: TableRowDecoder) {
         tableRowDecoders[table] = decoder
     }
 
-    internal func decoder(forTable name: String) -> TableRowDecoder? {
+    public func decoder(forTable name: String) -> TableRowDecoder? {
         return tableRowDecoders[name]
     }
 

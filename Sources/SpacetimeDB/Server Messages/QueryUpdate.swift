@@ -9,7 +9,7 @@ import Foundation
 import BSATN
 
 /// Represents a query update containing deletes and inserts
-public struct QueryUpdate {
+public struct QueryUpdate: Sendable {
     public let deletes: BsatnRowList
     public let inserts: BsatnRowList
 

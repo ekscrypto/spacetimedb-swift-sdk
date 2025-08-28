@@ -10,7 +10,7 @@ import BSATN
 import Compression
 
 /// Represents a query update that can be compressed or uncompressed
-public enum CompressibleQueryUpdate {
+public enum CompressibleQueryUpdate: Sendable {
     case uncompressed(QueryUpdate)
     case brotli(Data)
     case gzip(Data)

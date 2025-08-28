@@ -9,7 +9,7 @@ import Foundation
 import BSATN
 
 /// Represents a list of BSATN-encoded rows
-public struct BsatnRowList {
+public struct BsatnRowList: Sendable {
     public let rows: [Data]
 
     struct Model: ArrayModel {
@@ -71,5 +71,59 @@ public struct BsatnRowList {
 
     init(rows: [Data] = []) {
         self.rows = rows
+    }
+    
+    // Constructor for binary offset-based format used by OneOffQuery responses
+    init(reader: BSATNReader) throws {
+        debugLog(">>> BsatnRowList: reading binary format with offsets")
+        
+        // Read size hint
+        let sizeHint: UInt8 = try reader.read()
+        debugLog(">>>   Size hint: \(sizeHint)")
+        
+        // Use the existing working parser from CompressibleQueryUpdate
+        var rows: [Data] = []
+        let rowCount = try Self.readBsatnRowListFormat(reader: reader, into: &rows)
+        
+        self.rows = rows
+        debugLog(">>> BsatnRowList: parsed \(rows.count) rows from binary format")
+    }
+    
+    /// Helper to read BsatnRowList format (same as CompressibleQueryUpdate)
+    private static func readBsatnRowListFormat(reader: BSATNReader, into rows: inout [Data]) throws -> Int {
+        let offsetCount: UInt32 = try reader.read()
+
+        // Read offset table
+        var offsets: [UInt64] = []
+        for _ in 0..<offsetCount {
+            let offset: UInt64 = try reader.read()
+            offsets.append(offset)
+        }
+
+        // Read data size
+        let dataSize: UInt32 = try reader.read()
+
+        // Read the data blob and split by offsets
+        if dataSize > 0 && offsetCount > 0 {
+            let dataBlobSlice = try reader.readBytes(Int(dataSize))
+            let dataBlob = Data(dataBlobSlice)
+
+            // Offsets indicate the START position of each row in the data blob
+            for i in 0..<Int(offsetCount) {
+                let startOffset = Int(offsets[i])
+                let endOffset = (i + 1 < offsetCount) ? Int(offsets[i + 1]) : dataBlob.count
+
+                // Make sure offsets are valid
+                guard startOffset <= dataBlob.count && endOffset <= dataBlob.count && startOffset <= endOffset else {
+                    debugLog(">>>   Warning: Invalid offsets for row \(i): start=\(startOffset), end=\(endOffset), dataSize=\(dataBlob.count)")
+                    continue
+                }
+
+                let rowData = Data(dataBlob[startOffset..<endOffset])
+                rows.append(rowData)
+            }
+        }
+
+        return Int(offsetCount)
     }
 }

@@ -8,7 +8,7 @@
 import Foundation
 import BSATN
 
-public struct TableUpdate {
+public struct TableUpdate: Sendable {
     public let id: UInt32
     public let name: String
     public let numRows: UInt64

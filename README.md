@@ -93,6 +93,8 @@ The Swift chat client implements all core features from the official tutorials, 
 - 🎯 **Rename detection** - Shows "User X renamed to Y" notifications
 - 🎯 **Message distinction** - Your messages display differently from others
 - 🎯 **User listing** - `/users` command shows all online users
+- 🎯 **OneOffQuery support** - `--fetch-users-only` fetches all users without subscription
+- 🎯 **Subscription management** - `/sub` and `/unsub` commands for testing subscription lifecycle
 - 🎯 **Subscription readiness** - Waits for data sync before accepting commands
 - 🎯 **Token persistence** - Maintains identity across sessions (use `--clear-identity` to reset)
 - 🎯 **Automatic reconnection** - Reconnects with exponential backoff on connection loss
@@ -102,6 +104,8 @@ The Swift chat client implements all core features from the official tutorials, 
 - `/help` - Show available commands
 - `/name <name>` - Set your display name
 - `/users` - List online users
+- `/sub` - Subscribe to user and message updates
+- `/unsub` - Unsubscribe from current subscription
 - `/quit` - Exit the application
 - Any other text sends a chat message
 
@@ -152,10 +156,14 @@ try await client.connect(
 import SpacetimeDB
 
 // Subscribe to multiple tables
+let queryId = await client.nextQueryId
 try await client.subscribeMulti(
     queries: ["SELECT * FROM user", "SELECT * FROM message"], 
-    queryId: 1
+    queryId: queryId
 )
+
+// Later, unsubscribe from the subscription
+try await client.unsubscribe(queryId: queryId)
 ```
 
 ### Calling reducers
@@ -176,6 +184,25 @@ struct SetNameReducer: Reducer {
 // Call the reducer
 let reducer = SetNameReducer(userName: "Alice")
 let requestId = try await client.callReducer(reducer)
+```
+
+### Executing One-Off Queries
+```swift
+import SpacetimeDB
+
+// Execute a single SQL query without subscription
+let result = try await client.oneOffQuery("SELECT * FROM user", timeout: 30.0)
+
+if let error = result.error {
+    print("Query failed: \(error)")
+} else {
+    // Decode rows using registered table decoders
+    let users: [UserRow] = await result.decodeRows(from: "user", using: client)
+    
+    for user in users {
+        print("User: \(user.identity) \(user.name ?? "<unnamed>") \(user.online ? "online" : "offline")")
+    }
+}
 ```
 
 ## SDK Implementation Status
@@ -205,32 +232,34 @@ let requestId = try await client.callReducer(reducer)
 ##### ✅ Implemented
 - **Subscribe**: Subscribe to SQL queries
 - **SubscribeMulti**: Subscribe to multiple SQL queries in one request
+- **UnsubscribeMulti**: Remove existing multi-query subscriptions
 - **CallReducer**: Call server-side reducer functions with BSATN-encoded arguments
+- **OneOffQuery**: Execute single queries without subscription
 - **ConnectionInit**: Initial connection setup with authentication
 
 ##### ❌ Not Implemented
-- **Unsubscribe**: Remove existing subscriptions
+- **Unsubscribe**: Remove single subscriptions (UnsubscribeMulti is implemented)
 - **RegisterTimer**: Schedule recurring operations
-- **OneOffQuery**: Execute single queries without subscription
 
 #### Server → Client Messages
 
 ##### ✅ Implemented
 - **IdentityToken**: Receive authentication token and identity
 - **SubscribeMultiApplied**: Confirmation of multi-query subscription
+- **UnsubscribeMultiApplied**: Confirmation of multi-query unsubscription
 - **TransactionUpdate**: Database changes from reducer execution
   - TableUpdate: Row insertions and deletions
   - DatabaseUpdate: Batch of table updates
   - ReducerCallResponse: Reducer execution status and energy usage
 - **QueryUpdate**: Initial data and updates for subscribed queries
 - **CompressibleQueryUpdate**: Wrapper for compression support (parsing only)
+- **OneOffQueryResponse**: Response to one-off queries
 
 ##### ⚠️ Partially Implemented
 - **SubscribeApplied**: Single subscription confirmation (untested)
-- **UnsubscribeApplied**: Unsubscription confirmation (untested)
+- **UnsubscribeApplied**: Single unsubscription confirmation (untested)
 
 ##### ❌ Not Implemented
-- **OneOffQueryResponse**: Response to one-off queries
 - **Event**: Server-side event notifications
 
 ### Compression Support
@@ -259,34 +288,39 @@ let requestId = try await client.callReducer(reducer)
 - `onTableUpdate`: Database table changes with batched updates
 - `onReducerResponse`: Reducer execution results
 - `onSubscribeMultiApplied`: Multi-subscription ready
+- `onUnsubscribeMultiApplied`: Multi-unsubscription complete
 - `onReconnecting`: Reconnection attempt in progress
+- `onOneOffQueryResponse`: One-off query results
 
 ##### ❌ Not Implemented
 - `onEvent`: Server event notifications
-- `onOneOffQueryResult`: Query result callbacks
 
 ### Test Coverage
 
-The SDK includes unit tests for core components but lacks end-to-end protocol testing:
+The SDK now has comprehensive unit test coverage (92 tests) for all major components:
 
-**✅ Well Tested:**
+**✅ Fully Tested (Message Protocol):**
+- **Request Encoding**: CallReducer, SubscribeMulti, UnsubscribeMulti, OneOffQuery
+- **Response Decoding**: SubscribeMultiApplied, UnsubscribeMultiApplied, OneOffQueryResponse
 - **BSATN Types**: All primitive types, arrays, products, and AlgebraicValues
 - **Large Integers**: UInt128, UInt256, Int128, Int256 with JSON encoding
-- **Core Messages**: IdentityToken, BsatnRowList, CompressibleQueryUpdate
+- **Core Infrastructure**: IdentityToken, BsatnRowList, CompressibleQueryUpdate
 - **Compression**: Unified compression enum with Brotli support
-- **Message Handling**: BSATNMessageHandler with various message types
+- **Message Handling**: BSATNMessageHandler with various message types and error cases
+- **Binary Structure**: Exact byte-level verification of protocol messages
+- **Edge Cases**: Empty data, maximum values, unicode strings, large payloads
+- **Error Scenarios**: Invalid data, insufficient bytes, unsupported operations
 
 **⚠️ Limited Testing:**
-- **Protocol Flow**: Connection lifecycle, subscription management
-- **Error Recovery**: Network failures, malformed messages
-- **Edge Cases**: Large messages, concurrent operations
-- **Unimplemented Features**: Cannot test OneOffQuery, Unsubscribe, Events
+- **Protocol Flow**: End-to-end connection lifecycle and subscription management
+- **Network Layer**: Connection failures, reconnection scenarios
+- **Concurrent Operations**: Multiple simultaneous requests and responses
 
 ### Known Limitations
 
 1. **Gzip Compression**: Gzip compression is not supported (Brotli and uncompressed work)
 2. **Large Messages**: No streaming support for very large messages
-3. **Subscription Management**: Cannot unsubscribe from queries
+3. **Single Subscriptions**: Cannot unsubscribe from single queries (only multi-query unsubscribe)
 4. **Timers**: No support for server-side scheduled operations
 5. **Non-String Map Keys**: Maps/Dictionaries with non-String keys need more testing
 
@@ -297,13 +331,15 @@ The SDK includes unit tests for core components but lacks end-to-end protocol te
 - [x] ~~Add automatic reconnection with exponential backoff~~ ✅ Completed
 - [x] ~~Add debug mode for detailed logging~~ ✅ Completed
 - [x] ~~Add connection heartbeat/keepalive~~ ✅ Completed (native URLSessionWebSocketTask support)
-- [ ] Implement unsubscribe functionality
-- [ ] Add one-off query support
+- [x] ~~Implement multi-query unsubscribe functionality~~ ✅ Completed
+- [x] ~~Add one-off query support~~ ✅ Completed
+- [x] ~~Comprehensive unit tests for all protocol messages~~ ✅ Completed (92 tests)
 - [ ] Implement server event handling
 - [ ] Support for timer registration
-- [x] ~~Comprehensive unit tests for all BSATN types~~ ✅ Completed
+- [ ] Implement single-query unsubscribe (Unsubscribe vs UnsubscribeMulti)
 - [ ] Performance optimizations for large datasets
 - [ ] SwiftUI property wrappers for reactive updates
+- [ ] End-to-end integration tests
 
 ## Lessons learned
 

@@ -15,6 +15,7 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
     private var userNameCache: [UInt256: String?] = [:]  // Track user names for change detection
     private var myIdentity: UInt256? = nil
     private var subscriptionReady: Bool = false
+    private var activeSubscription: UInt32? = nil
 
     func onReconnecting(client: SpacetimeDBClient, attempt: Int) async {
         print("\n🔄 Attempting to reconnect... (attempt \(attempt)/10)")
@@ -31,6 +32,7 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
     func onSubscribeMultiApplied(client: SpacetimeDBClient, queryId: UInt32) {
         print("✅ Query applied: \(queryId)")
         subscriptionReady = true
+        activeSubscription = queryId
         Task {
             let userCount = await database.getUserCount()
             let messageCount = await database.getMessageCount()
@@ -80,7 +82,8 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
         // Clear the local database to avoid duplicates when resubscribing
         await database.clear()
 
-        _ = try? await client.subscribeMulti(queries: ["SELECT * FROM user", "SELECT * FROM message"], queryId: 1)
+        let queryId = await client.nextQueryId
+        _ = try? await client.subscribeMulti(queries: ["SELECT * FROM user", "SELECT * FROM message"], queryId: queryId)
     }
 
     func onError(client: SpacetimeDBClient, error: any Error) async {
@@ -90,6 +93,7 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
     func onDisconnect(client: SpacetimeDBClient) async {
         print("\n⚠️  Connection lost! Will attempt to reconnect automatically...")
         subscriptionReady = false
+        activeSubscription = nil
     }
 
     func onIncomingMessage(client: SpacetimeDBClient, message: Data) async {
@@ -225,5 +229,35 @@ final class ChatClientDelegate: SpacetimeDBClientDelegate, @unchecked Sendable {
         if reducer == "set_name" && status == "committed" {
             print("   ✅ Name change was successful!")
         }
+    }
+
+    func onUnsubscribeApplied(client: SpacetimeDBClient, queryId: UInt32) async {
+        print("✅ Unsubscribe applied: \(queryId)")
+        if activeSubscription == queryId {
+            activeSubscription = nil
+            subscriptionReady = false
+            await database.clear()
+            print("📊 Local database cleared due to unsubscribe")
+        }
+    }
+
+    func getActiveSubscription() -> UInt32? {
+        return activeSubscription
+    }
+
+    func subscribe(client: SpacetimeDBClient) async throws -> UInt32 {
+        let queryId = await client.nextQueryId
+        _ = try await client.subscribeMulti(queries: ["SELECT * FROM user", "SELECT * FROM message"], queryId: queryId)
+        print("📡 Subscription request sent with queryId: \(queryId)")
+        return queryId
+    }
+
+    func unsubscribe(client: SpacetimeDBClient) async throws {
+        guard let queryId = activeSubscription else {
+            print("⚠️ No active subscription to unsubscribe from")
+            return
+        }
+        try await client.unsubscribe(queryId: queryId)
+        print("📡 Unsubscribe request sent for queryId: \(queryId)")
     }
 }

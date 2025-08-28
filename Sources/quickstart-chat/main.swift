@@ -68,8 +68,121 @@ struct TokenStorage {
     }
 }
 
+// Delegate for one-off queries  
+actor OneOffQueryDelegate: SpacetimeDBClientDelegate {
+    private var connectionContinuation: CheckedContinuation<Void, Never>?
+    private var identityReceived = false
+    private var connected = false
+    
+    func waitForConnection() async {
+        await withCheckedContinuation { continuation in
+            self.connectionContinuation = continuation
+        }
+    }
+    
+    private func checkReadyAndResume() {
+        if connected && identityReceived, let continuation = connectionContinuation {
+            print("✅ Connection and identity ready for OneOffQuery")
+            continuation.resume()
+            connectionContinuation = nil
+        }
+    }
+    
+    func onConnect(client: SpacetimeDBClient) async {
+        print("🔗 Connection established")
+        connected = true
+        checkReadyAndResume()
+    }
+    
+    nonisolated func onDisconnect(client: SpacetimeDBClient) async {}
+    func onIdentityReceived(client: SpacetimeDBClient, token: String, identity: UInt256) async {
+        print("🆔 Identity received: \(identity.description.prefix(8))...")
+        identityReceived = true
+        checkReadyAndResume()
+    }
+    nonisolated func onSubscribeMultiApplied(client: SpacetimeDBClient, queryId: UInt32) {}
+    nonisolated func onTableUpdate(client: SpacetimeDBClient, table: String, deletes: [Any], inserts: [Any]) async {}
+    nonisolated func onReducerResponse(client: SpacetimeDBClient, reducer: String, requestId: UInt32, status: String, message: String?, energyUsed: UInt128) async {}
+    nonisolated func onError(client: SpacetimeDBClient, error: Error) async {}
+    nonisolated func onReconnecting(client: SpacetimeDBClient, attempt: Int) async {}
+    nonisolated func onIncomingMessage(client: SpacetimeDBClient, message: Data) async {}
+}
+
 @main
 struct QuickstartChat {
+    static func fetchUsersOnly() async {
+        print("🔍 Fetching users using OneOffQuery...")
+        
+        do {
+            // Create client with debug enabled and no compression for easier debugging
+            let client = try SpacetimeDBClient(
+                host: "http://localhost:3000",
+                db: "quickstart-chat",
+                compression: .none,
+                debugEnabled: true
+            )
+            
+            // Register the UserRowDecoder before connecting
+            await client.registerTableRowDecoder(table: "user", decoder: UserRowDecoder())
+            
+            // Load saved token if available (reuse authentication from regular client)
+            let savedToken = TokenStorage.load()
+            if savedToken != nil {
+                print("🔑 Using saved authentication token")
+            } else {
+                print("ℹ️ No saved token found - connecting as anonymous user")
+            }
+            
+            // Connect with delegate that signals when connection is ready
+            let delegate = OneOffQueryDelegate()
+            try await client.connect(token: savedToken, delegate: delegate)
+            
+            // Wait for connection and identity to be fully established
+            await delegate.waitForConnection()
+            
+            // Execute one-off query to get all users with longer timeout  
+            print("📤 Sending OneOffQuery...")
+            let result = try await client.oneOffQuery("SELECT * FROM user", timeout: 30.0)
+            
+            if let error = result.error {
+                print("❌ Query error: \(error)")
+                exit(1)
+            }
+            
+            print("✅ Query executed successfully in \(result.executionDuration) microseconds")
+            
+            // Check if user table exists in results
+            guard result.tables.contains(where: { $0.name == "user" }) else {
+                print("📊 No user table found in results")
+                await client.disconnect()
+                return
+            }
+            
+            // Decode user rows using the client's registered decoder (same as normal table updates)
+            let users: [UserRow] = await result.decodeRows(from: "user", using: client)
+            
+            if users.isEmpty {
+                print("📊 No users found in database")
+            } else {
+                print("\n👥 Users found (\(users.count)):")
+                
+                for user in users {
+                    let displayName = user.name ?? "<unnamed>"
+                    let onlineStatus = user.online ? "online" : "offline"
+                    let fullIdentity = user.identity.description
+                    
+                    print("\(fullIdentity) \(displayName) \(onlineStatus)")
+                }
+            }
+            
+            await client.disconnect()
+            
+        } catch {
+            print("❌ Failed to fetch users: \(error)")
+            exit(1)
+        }
+    }
+
     static func showOnlineUsers(delegate: ChatClientDelegate) async {
         let users = await delegate.getAllUsers()
         let onlineUsers = users.filter { $0.online }
@@ -130,11 +243,32 @@ struct QuickstartChat {
                     case "/users":
                         await showOnlineUsers(delegate: delegate)
 
+                    case "/sub":
+                        if delegate.getActiveSubscription() != nil {
+                            print("⚠️ Already subscribed to queryId: \(delegate.getActiveSubscription()!)")
+                        } else {
+                            do {
+                                let queryId = try await delegate.subscribe(client: client)
+                                print("📡 Subscribing with queryId: \(queryId)")
+                            } catch {
+                                print("❌ Failed to subscribe: \(error)")
+                            }
+                        }
+
+                    case "/unsub":
+                        do {
+                            try await delegate.unsubscribe(client: client)
+                        } catch {
+                            print("❌ Failed to unsubscribe: \(error)")
+                        }
+
                     case "/help":
                         print("\n📖 Available Commands:")
                         print("   /quit - Exit the application")
                         print("   /name <name> - Set your name")
                         print("   /users - Show online users")
+                        print("   /sub - Subscribe to chat data")
+                        print("   /unsub - Unsubscribe from chat data")
                         print("   /help - Show this help message")
                         print("\nOr just type any text to send a message to the chat!\n")
 
@@ -178,6 +312,11 @@ struct QuickstartChat {
         if args.contains("--clear-identity") {
             TokenStorage.clear()
             print("Identity cleared. A new identity will be created.\n")
+        }
+
+        if args.contains("--fetch-users-only") {
+            await fetchUsersOnly()
+            return
         }
 
         // Load saved token if available

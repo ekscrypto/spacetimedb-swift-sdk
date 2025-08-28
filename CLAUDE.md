@@ -33,6 +33,11 @@ This document focuses on **implementation details** not covered in the README.
    - Must implement `Reducer` protocol with BSATN argument encoding
    - Called via `client.callReducer(reducer)`
 
+5. **Subscription Management**: Clients can subscribe and unsubscribe from data changes
+   - Use `client.subscribeMulti()` with unique queryId from `client.nextQueryId`
+   - Use `client.unsubscribe(queryId:)` to remove subscriptions
+   - Subscription state should be tracked at application level, not in SpacetimeDBClient
+
 ### Architecture Decisions
 
 - **No SDK-level interpretation**: The SDK passes data to the client delegate without interpreting changes (e.g., rename detection is done by the client, not the SDK)
@@ -52,7 +57,7 @@ swift build
 2. **The client is interactive** - it waits for user input. Enter `/quit` to exit properly. If you just run it without input, it will appear to "hang" but it's actually waiting for commands
 3. **Use echo for automated testing**: `echo "/quit" | swift run quickstart-chat` to automatically exit after connection
 4. **Check connection success**: The client should show "✅ Connected to SpacetimeDB!" and receive user/message data
-5. **Verify with real operations**: Test actual commands like `/name TestUser` and sending messages to ensure protocol changes work
+5. **Verify with real operations**: Test actual commands like `/name TestUser`, `/sub`, `/unsub`, and sending messages to ensure protocol changes work
 
 ### Compression Support
 
@@ -78,15 +83,16 @@ The SDK automatically handles both protocol-level compression (entire messages) 
 
 ### Priority Roadmap Items
 
-1. **Missing Protocol Features** (Medium Priority)
-   - Implement Unsubscribe functionality
-   - Add OneOffQuery support
+1. **Missing Protocol Features** (Low Priority)
+   - ~~Implement UnsubscribeMulti functionality~~ ✅ Completed
+   - ~~Add OneOffQuery support~~ ✅ Completed
    - Implement server Event handling
+   - Implement single-query Unsubscribe (vs UnsubscribeMulti)
    - Files: Check `Tags.swift` for message types
 
-2. **Testing & Documentation** (✅ Mostly Complete)
+2. **Testing & Documentation** (✅ Complete)
    - ~~Add unit tests for all BSATN types~~ ✅ Completed
-   - ~~Create integration tests for protocol messages~~ ✅ Completed
+   - ~~Create comprehensive protocol message tests~~ ✅ Completed (92 tests)
    - Add code documentation with examples (Ongoing)
 
 ### Common Pitfalls to Avoid
@@ -147,12 +153,12 @@ Debug mode is **disabled by default** to keep console output clean in production
 
 1. **Gzip compression** is not implemented (Brotli and uncompressed messages work)
 2. ~~No automatic reconnection on connection loss~~ ✅ **Fixed** - Auto-reconnect with exponential backoff
-3. **Cannot unsubscribe** from queries once subscribed
+3. ~~Cannot unsubscribe from queries once subscribed~~ ✅ **Fixed** - UnsubscribeMulti implemented
 4. ~~No heartbeat/keepalive mechanism~~ ✅ **Fixed** - Native URLSessionWebSocketTask ping/pong
 
 ### Test Coverage Status
 
-The SDK now has comprehensive test coverage (~70%+) including:
+The SDK now has comprehensive test coverage (92 tests, ~85%+) including:
 
 #### ✅ Fully Tested Components
 - **BSATN Data Types**:
@@ -160,6 +166,14 @@ The SDK now has comprehensive test coverage (~70%+) including:
   - **Int256** - Full encoding/decoding with JSON serialization
   - Arrays, Products, and AlgebraicValues
   - Optional types via Sum types
+- **Protocol Message Encoding/Decoding**:
+  - **CallReducerRequest** - Reducer calls with arguments and metadata (6 tests)
+  - **SubscribeMultiRequest** - Multi-query subscription requests (4 tests)
+  - **UnsubscribeMultiRequest** - Multi-query unsubscription requests (5 tests)
+  - **OneOffQueryRequest** - Single query execution requests (7 tests)
+  - **SubscribeMultiApplied** - Subscription confirmation responses (5 tests)
+  - **UnsubscribeMultiApplied** - Unsubscription confirmation responses (5 tests)
+  - **OneOffQueryResponse** - Query result responses (8 tests)
 - **Message Processing**:
   - **BSATNMessageHandler** - Message routing with compression support
   - **BSATNError** - Error scenarios with Equatable conformance
@@ -168,7 +182,6 @@ The SDK now has comprehensive test coverage (~70%+) including:
   - **BsatnRowList** - Row data creation and management
   - **CompressibleQueryUpdate** - Uncompressed and Brotli variants
   - TransactionUpdate - Real server message parsing
-  - SubscribeMultiApplied - Table ID validation
 - **Infrastructure**:
   - **Compression enum** - Unified enum with all options tested
   - **OptionModel** - Helper for Option sum types
@@ -177,8 +190,16 @@ The SDK now has comprehensive test coverage (~70%+) including:
 - **Connection lifecycle** - WebSocket connection/disconnection flows
 - **WebSocket handling** - Delegate callback interactions
 - **Authentication flows** - End-to-end token management
-- **DatabaseUpdate** - Complex batch operations
-- **QueryUpdate** - Comprehensive query result scenarios
+- **Network Layer** - Connection failures, reconnection scenarios
+- **Concurrent Operations** - Multiple simultaneous requests and responses
 
-**DO NOT USE XCTest** use the Swift Testing framework only
-**REMOVE TRAILING BLANK SPACES**
+**Test Suite Notes:**
+- **DO NOT USE XCTest** - use the Swift Testing framework only
+- **REMOVE TRAILING BLANK SPACES** from all files
+- **Test Pattern**: Each protocol message type has comprehensive tests covering:
+  - Normal operation with realistic data
+  - Edge cases (empty data, maximum values, unicode)
+  - Binary structure validation with hex verification
+  - Error scenarios and boundary conditions
+- **Test Naming**: Use descriptive test method names that explain the scenario being tested
+- **Success Indicators**: Include ✅ print statements for test verification messages

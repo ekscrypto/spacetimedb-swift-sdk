@@ -34,6 +34,8 @@ open class WebsocketDelegate: NSObject, URLSessionWebSocketDelegate, @unchecked 
         didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
         reason: Data?
     ) {
+        let reasonString = reason?.count ?? 0 > 0 ? String(data: reason!, encoding: .utf8) ?? "Unknown" : "No reason"
+        debugLog(">>> WebSocket closed with code: \(closeCode.rawValue), reason: \(reasonString)")
         Task.detached(priority: .utility) { [dbClient] in
             await dbClient?.websocketDisconnected()
         }

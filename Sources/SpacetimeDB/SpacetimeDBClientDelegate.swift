@@ -25,4 +25,21 @@ public protocol SpacetimeDBClientDelegate: AnyObject, Sendable {
     // The status indicates whether the reducer was committed, failed, or ran out of energy
     // energyUsed is the amount of energy consumed by the reducer execution
     func onReducerResponse(client: SpacetimeDBClient, reducer: String, requestId: UInt32, status: String, message: String?, energyUsed: UInt128) async
+    
+    // Called when a one-off query response is received
+    func onOneOffQueryResponse(client: SpacetimeDBClient, result: OneOffQueryResult) async
+    
+    // Called when an unsubscribe request is confirmed
+    func onUnsubscribeApplied(client: SpacetimeDBClient, queryId: UInt32) async
+}
+
+// Default implementation for optional delegate methods
+public extension SpacetimeDBClientDelegate {
+    func onOneOffQueryResponse(client: SpacetimeDBClient, result: OneOffQueryResult) async {
+        // Default empty implementation
+    }
+    
+    func onUnsubscribeApplied(client: SpacetimeDBClient, queryId: UInt32) async {
+        // Default empty implementation
+    }
 }
