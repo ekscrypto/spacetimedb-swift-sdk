@@ -109,6 +109,11 @@ The chat client supports several command line options for testing and debugging:
   - **Behavior**: Can send messages and call reducers, but won't receive live updates from other clients
   - **Example**: `./.build/debug/quickstart-chat --no-subscribe`
 
+- **`--streams`** - Run the streams-only demo (no `SpacetimeDBClientDelegate`)
+  - **Use case**: See the modern AsyncStream + `SubscriptionHandle` + `Credentials` API in action.
+  - **Implementation**: `Sources/quickstart-chat/StreamsChat.swift` (~150 LOC vs the 400-LOC delegate-based `ChatClientDelegate`).
+  - **Example**: `./.build/debug/quickstart-chat --streams`
+
 **Example Usage Scenarios:**
 
 ```bash
@@ -164,13 +169,68 @@ For comparison and reference, see the official SpacetimeDB quickstart tutorials:
 
 ## Usage
 
+### Modern API at a glance
+
+Phases 1-10 land a Swifty surface alongside the original delegate-based API:
+
+```swift
+// 1. Strong types
+let identity = Identity(hex: "deadbeef…")!     // wraps UInt256
+let duration = TimeDuration(seconds: 1.5)
+let now      = Timestamp.now
+
+// 2. AsyncStream events (no delegate required)
+for await event in client.connectionEvents { … }     // .connected/.reconnecting/.disconnected/.error
+for await reducer in client.reducerEvents   { … }    // typed ReducerStatus + EnergyQuanta
+for await tableEvent in client.tableEvents(named: "user") { … }
+for await rowEvent in client.rowEvents(table: "user") {
+    // PK-matched delete+insert pairs land as .updated(old:new:) automatically
+}
+
+// 3. SubscriptionHandle with applied()/unsubscribe() futures
+let sub = try await client.subscribe(["SELECT * FROM user"])
+try await sub.applied()
+// … work with rows …
+try await sub.unsubscribe()
+
+// 4. BSATNRow protocol — one-line table registration
+struct UserRow: BSATNTableWithPrimaryKey {
+    static let tableName = "user"
+    let identity: UInt256
+    let name: String?
+    let online: Bool
+    var primaryKey: UInt256 { identity }
+    init(reader: BSATNReader) throws {
+        self.identity = try reader.read()
+        self.name = try reader.readOptional { try reader.readString() }
+        self.online = try reader.read()
+    }
+}
+await client.registerTableRowDecoder(UserRow.self)
+
+// 5. Credentials persistence (Keychain on Apple, file fallback elsewhere)
+try Credentials(token: tok, identity: id).save()
+let restored = try Credentials.load()
+
+// 6. Codegen: spacetime-swift generate
+//    spacetime-swift generate --uri https://maincloud.spacetimedb.com \
+//                              --db   my-module --out Sources/Generated/
+
+// 7. Optional SwiftUI mirror (separate library product)
+import SpacetimeDBObservation
+@Observable final class AppModel {
+    let users: ObservableTable<UserRow>
+    init(client: SpacetimeDBClient) { self.users = ObservableTable(client: client) }
+}
+```
+
+The legacy `SpacetimeDBClientDelegate` still works (`connect(delegate:)` is now optional), but new code should prefer the surfaces above.
+
 ### Creating Table Row Decoders
 
-Before connecting to SpacetimeDB, you need to create decoders for your tables. See the **[Rust to Swift Conversion Guide](RUST_TO_SWIFT_GUIDE.md)** for detailed instructions on:
-- Generating Rust module bindings
-- Understanding type mappings
-- Creating Swift table row decoders
-- Handling optional fields and complex types
+Before connecting to SpacetimeDB, you need to create decoders for your tables. The recommended path is the **`BSATNRow`** protocol shown above — one `init(reader:)` per table, automatic registration via `client.registerTableRowDecoder(MyRow.self)`. The `spacetime-swift` codegen tool emits these for you from a SpacetimeDB schema JSON.
+
+The legacy `ProductModel` + `TableRowDecoder` pattern still compiles. See **[Rust to Swift Conversion Guide](RUST_TO_SWIFT_GUIDE.md)** for the long-form walkthrough.
 
 ### Establishing a connection
 ```swift
@@ -178,7 +238,7 @@ import SpacetimeDB
 import BSATN
 
 let client = try SpacetimeDBClient(
-  host: "http://localhost:3000", 
+  host: "http://localhost:3000",
   db: "quickstart-chat",
   compression: .brotli,  // Default is .brotli, can also use .none
   debugEnabled: false    // Set to true for detailed logging
@@ -204,7 +264,7 @@ import SpacetimeDB
 // Subscribe to multiple tables
 let queryId = await client.nextQueryId
 try await client.subscribeMulti(
-    queries: ["SELECT * FROM user", "SELECT * FROM message"], 
+    queries: ["SELECT * FROM user", "SELECT * FROM message"],
     queryId: queryId
 )
 
@@ -221,7 +281,7 @@ import BSATN
 struct SetNameReducer: Reducer {
     let name = "set_name"
     let userName: String
-    
+
     func encodeArguments(writer: BSATNWriter) throws {
         try writer.write(userName)
     }
@@ -244,7 +304,7 @@ if let error = result.error {
 } else {
     // Decode rows using registered table decoders
     let users: [UserRow] = await result.decodeRows(from: "user", using: client)
-    
+
     for user in users {
         print("User: \(user.identity) \(user.name ?? "<unnamed>") \(user.online ? "online" : "offline")")
     }

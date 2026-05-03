@@ -8,11 +8,16 @@
 import Foundation
 
 extension SpacetimeDBClient {
-    /// Connect to the server
+    /// Connect to the server.
+    ///
+    /// `delegate` is optional now: applications using only the AsyncStream
+    /// surface (`client.connectionEvents` / `.reducerEvents` / `.tableEvents`
+    /// / `.rowEvents`) and `SubscriptionHandle` should pass `nil`. The
+    /// legacy `SpacetimeDBClientDelegate` still works for backward compat.
     public func connect(
         token: AuthenticationToken? = nil,
         timeout: TimeInterval = 10.0,
-        delegate clientDelegate: SpacetimeDBClientDelegate,
+        delegate clientDelegate: SpacetimeDBClientDelegate? = nil,
         enableAutoReconnect: Bool = true
     ) throws {
         guard webSocketTask == nil else {

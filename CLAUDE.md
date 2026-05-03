@@ -26,26 +26,33 @@ This document focuses on **implementation details** not covered in the README.
    - Client → Server and Server → Client message types are defined in `Sources/SpacetimeDB/Tags.swift`
 
 3. **Table Row Decoders**: Tables require registered decoders before data can be received
-   - Must implement `TableRowDecoder` protocol
-   - Register before connecting: `client.registerTableRowDecoder(table: "name", decoder: MyDecoder())`
+   - **Recommended (Phase 5+)**: adopt the `BSATNRow` protocol on the row struct (just `init(reader:)` + `static var tableName`); register with `client.registerTableRowDecoder(MyRow.self)`. For tables with a primary key, adopt `BSATNTableWithPrimaryKey` instead — that unlocks `.updated(old:new:)` events on the per-row stream.
+   - **Legacy**: implement `TableRowDecoder` directly with a `ProductModel` and a `decode(modelValues:)` method. Still supported via a default `decode(reader:)` extension that reads the AlgebraicValue first.
+   - The codegen tool `spacetime-swift generate` emits `BSATNRow`/`BSATNTableWithPrimaryKey`-based files automatically.
 
 4. **Reducers**: Server-side functions that modify database state
    - Must implement `Reducer` protocol with BSATN argument encoding
    - Called via `client.callReducer(reducer)`
+   - Codegen also emits per-reducer `<Name>Reducer` structs.
 
 5. **Subscription Management**: Clients can subscribe and unsubscribe from data changes
-   - Multi-subscriptions: Use `client.subscribeMulti()` with unique queryId from `client.nextQueryId`
-   - Single subscriptions: Use `client.subscribe()` with unique queryId from `client.nextQueryId`
-   - Unsubscribing: Use `client.unsubscribe(queryId:)` for single subs or `client.unsubscribeMulti(queryId:)` for multi subs
-   - **✅ Both subscription types and unsubscribe functionality are fully implemented and tested**
-   - Subscription state should be tracked at application level, not in SpacetimeDBClient
+   - **Recommended (Phase 4+)**: `let handle = try await client.subscribe([...])` returns a `SubscriptionHandle`; await `handle.applied()` and later `handle.unsubscribe()`. Use `client.subscribeToAllTables()` (Phase 9) to subscribe to every registered table.
+   - **Legacy**: `subscribeMulti(queries:queryId:)` / `subscribe(queries:requestId:)` / `unsubscribe(queryId:)` / `unsubscribeSingle(queryId:)` still work as wire-level primitives.
+
+6. **Event surface (Phase 3+)**: prefer AsyncStreams over the delegate.
+   - `client.connectionEvents` — `.connected/.reconnecting/.disconnected/.error`
+   - `client.reducerEvents` — typed `ReducerStatus` + `EnergyQuanta`
+   - `client.subscriptionEvents` — `.applied/.unsubscribed/.error`
+   - `client.tableEvents(named:)` — batched per-table updates
+   - `client.rowEvents(table:)` — per-row events; PK-matched delete+insert pairs collapse to `.updated(old:new:)` automatically
+   - `SpacetimeDBClientDelegate` still works (`connect(delegate:)` is now optional) but is legacy.
 
 ### Architecture Decisions
 
-- **No SDK-level interpretation**: The SDK passes data to the client delegate without interpreting changes (e.g., rename detection is done by the client, not the SDK)
-- **Batched updates**: All table updates for a transaction are batched before notifying the delegate
+- **No SDK-level interpretation**: The SDK passes data to the delegate without interpreting changes — rename detection is done by the client. The streams API does it for free via Phase 6 PK matching when the row adopts `BSATNTableWithPrimaryKey`.
+- **Batched updates**: All table updates for a transaction are batched before notifying delegate AND before fanning out to the per-table stream.
 - **Offsets in BsatnRowList**: Offsets mark the START position of rows in the data blob, not the end
-- **Subscription readiness**: Clients should wait for `onSubscribeMultiApplied` before processing user commands
+- **Subscription readiness**: Wait for `SubscriptionHandle.applied()` (or the legacy `onSubscribeMultiApplied` delegate call) before processing user commands. **Streams-mode trap**: subscribing before the server's `IdentityToken` arrives hangs against maincloud — always wait for `ConnectionEvent.connected` before calling `subscribe(...)`. See `Sources/quickstart-chat/StreamsChat.swift` for the canonical pattern.
 
 ### Testing Commands
 When implementing new features, test with the quickstart-chat application:
@@ -66,6 +73,7 @@ swift build
    ```
    Connection-only is read-safe; reducer calls (`/name`, send-message) post to a shared module — get explicit user authorization before doing more than connect+subscribe.
 7. **`swiftpm-testing-helper` SIGSEGV/SIGBUS on incremental builds**: when adding/removing public methods on classes consumed by the test bundle (notably `BSATNWriter`, `BSATNReader`), incremental rebuilds can leave the test xctest binary linked against a stale class layout. The helper then crashes (SIGSEGV/SIGBUS) inside `_ArrayBuffer.count.getter` when running the stale bundle. Tests themselves are fine. Workaround: `rm -rf .build && swift test` after such changes. Report this to swift.org if it reproduces on a non-macOS-26 toolchain.
+8. **Parser desync after a 0-row table in SubscribeMultiApplied**: when the server returns a `DatabaseUpdate` whose first table has 0 deletes/0 inserts and the next table has rows, the BSATN parser desyncs and reads garbage. Reproducible against `quickstart-chat-55kji` on maincloud: `subscribe(["SELECT * FROM message", "SELECT * FROM user"])` hangs because `applied()` never resolves. Workaround: hand-order queries so any 0-row tables come last (`["SELECT * FROM user", "SELECT * FROM message"]` works). `subscribeToAllTables()` sorts alphabetically and may hit this. Likely a missing/extra byte in `QueryUpdate` parsing for the empty-rowlist case in `Sources/SpacetimeDB/Server Messages/CompressibleQueryUpdate.swift` or `TableUpdate.swift`. Pre-existing; not introduced by Phase 10.
 
 ### Compression Support
 

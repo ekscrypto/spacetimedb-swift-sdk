@@ -284,6 +284,10 @@ struct QuickstartChat {
     }
 
     static func main() async {
+        // Force line-buffered stdout so output appears promptly when
+        // stdout is redirected to a file or pipe (Swift defaults to
+        // block-buffering in that case).
+        setvbuf(stdout, nil, _IOLBF, 0)
         let config = ClientConfig.fromEnvironment()
 
         print("Starting SpacetimeDB Client...")
@@ -303,6 +307,11 @@ struct QuickstartChat {
 
         if args.contains("--fetch-users-only") {
             await fetchUsersOnly()
+            return
+        }
+
+        if args.contains("--streams") {
+            await runStreamsMode(config: config)
             return
         }
 
@@ -349,6 +358,68 @@ struct QuickstartChat {
 
         } catch {
             print("\n❌ Fatal Error: \(error)")
+            exit(1)
+        }
+    }
+
+    /// Phase 10 streams-only path. Replaces ChatClientDelegate with the
+    /// AsyncStream + SubscriptionHandle + Credentials API. Triggered
+    /// via `quickstart-chat --streams`.
+    static func runStreamsMode(config: ClientConfig) async {
+        do {
+            print("🚀 Streams mode (no SpacetimeDBClientDelegate)\n")
+
+            // Token precedence: env override > saved credentials file > anonymous.
+            // (Streams demo uses the file-backed Credentials path because the
+            // Keychain path may prompt for Touch ID / password and block in
+            // headless environments. Real apps on macOS/iOS should use the
+            // Keychain `Credentials.save()` / `Credentials.load()` overloads.)
+            let credsURL = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("spacetimedb-streams-demo.json")
+            let token: AuthenticationToken?
+            if let envToken = config.token {
+                token = envToken
+                print("🔑 Using token from SPACETIMEDB_TOKEN")
+            } else if let creds = try? Credentials.load(from: credsURL) {
+                token = creds.authenticationToken
+                print("🔑 Using saved credentials (identity \(creds.identity.abbreviated)…)")
+            } else {
+                token = nil
+                print("ℹ️ No token found - server will issue a new identity")
+            }
+
+            let chat = try StreamsChat(host: config.host, db: config.db, credentialsURL: credsURL)
+            try await chat.run(token: token)
+
+            // REPL — same shape as the legacy path, smaller surface.
+            while true {
+                guard let raw = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+                    try? await Task.sleep(nanoseconds: 10_000_000)
+                    continue
+                }
+                if raw == "/quit" {
+                    print("👋 Goodbye!")
+                    await chat.shutdown()
+                    return
+                }
+                if raw.hasPrefix("/name ") {
+                    let name = String(raw.dropFirst("/name ".count))
+                    do { try await chat.setName(name) }
+                    catch { print("❌ \(error)") }
+                    continue
+                }
+                if raw == "/help" {
+                    print("\n📖 Streams-mode commands:")
+                    print("   /quit          - Exit")
+                    print("   /name <name>   - Set your display name")
+                    print("   <text>         - Send a chat message\n")
+                    continue
+                }
+                do { try await chat.sendMessage(raw) }
+                catch { print("❌ \(error)") }
+            }
+        } catch {
+            print("❌ Fatal Error: \(error)")
             exit(1)
         }
     }
