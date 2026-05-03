@@ -1,5 +1,13 @@
 # Converting Rust Module Bindings to Swift Table Row Decoders
 
+> **⚠️ Legacy walkthrough.** This guide documents the original
+> `ProductModel` + `TableRowDecoder` pattern. The **recommended path**
+> for new code is the `BSATNRow` / `BSATNTableWithPrimaryKey` protocol
+> shown in the [README](README.md#modern-api-at-a-glance), which is also
+> what `spacetime-swift generate` emits. The legacy pattern below still
+> compiles, and is kept here as a reference for hand-translating Rust
+> bindings without using the codegen tool.
+
 This guide explains how to convert SpacetimeDB Rust module bindings to Swift table row decoders for use with the spacetimedb-swift-sdk.
 
 ## Table of Contents

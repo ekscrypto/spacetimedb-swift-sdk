@@ -11,7 +11,10 @@ SDK to connect to SpacetimeDB from Swift
 This is a community project and is not an official SDK supported by Clockwork Labs.
 For more information about SpacetimeDB, visit https://spacetimedb.com
 
-STATUS: Alpha -- Core features working but protocol implementation incomplete. Production use not recommended.
+STATUS: Alpha — speaks SpacetimeDB WebSocket protocol **v2.bsatn.spacetimedb**.
+Core surface (subscribe, callReducer, callProcedure, oneOffQuery, AsyncStream events,
+auto-reconnect, gzip+brotli decompression) is implemented and verified end-to-end
+against `maincloud.spacetimedb.com`. Production use not recommended yet.
 
 ## Installation
 
@@ -99,11 +102,6 @@ The chat client supports several command line options for testing and debugging:
   - **Use case**: Testing OneOffQuery functionality, debugging server connectivity without real-time updates
   - **Example**: `./.build/debug/quickstart-chat --fetch-users-only`
 
-- **`--single`** - Uses individual Subscribe requests instead of SubscribeMulti
-  - **Use case**: Testing single subscription protocol, debugging subscription behavior, protocol development
-  - **Technical**: Sends separate `Subscribe` messages for `user` and `message` tables instead of one `SubscribeMulti`
-  - **Example**: `./.build/debug/quickstart-chat --single`
-
 - **`--no-subscribe`** - Connects without subscribing to any tables (no real-time updates)
   - **Use case**: Testing basic connection, sending reducers without receiving table updates, debugging unsubscribe behavior
   - **Behavior**: Can send messages and call reducers, but won't receive live updates from other clients
@@ -117,8 +115,8 @@ The chat client supports several command line options for testing and debugging:
 **Example Usage Scenarios:**
 
 ```bash
-# Start fresh with new identity using single subscriptions
-./.build/debug/quickstart-chat --clear-identity --single
+# Start fresh with a new identity
+./.build/debug/quickstart-chat --clear-identity
 
 # Test connection and fetch users without subscribing
 ./.build/debug/quickstart-chat --fetch-users-only
@@ -145,7 +143,6 @@ The Swift chat client implements all core features from the official tutorials, 
 - 🎯 **User listing** - `/users` command shows all online users
 - 🎯 **OneOffQuery support** - `--fetch-users-only` fetches all users without subscription
 - 🎯 **Subscription management** - `/sub` and `/unsub` commands with full unsubscribe functionality
-- 🎯 **Subscription testing** - `--single` uses individual Subscribe requests for protocol testing
 - 🎯 **Non-subscription mode** - `--no-subscribe` connects without real-time updates for testing
 - 🎯 **Subscription readiness** - Waits for data sync before accepting commands
 - 🎯 **Token persistence** - Maintains identity across sessions (use `--clear-identity` to reset)
@@ -171,7 +168,8 @@ For comparison and reference, see the official SpacetimeDB quickstart tutorials:
 
 ### Modern API at a glance
 
-Phases 1-10 land a Swifty surface alongside the original delegate-based API:
+The SDK exposes a Swift Concurrency-first surface alongside the legacy
+delegate-based API:
 
 ```swift
 // 1. Strong types
@@ -180,10 +178,10 @@ let duration = TimeDuration(seconds: 1.5)
 let now      = Timestamp.now
 
 // 2. AsyncStream events (no delegate required)
-for await event in client.connectionEvents { … }     // .connected/.reconnecting/.disconnected/.error
-for await reducer in client.reducerEvents   { … }    // typed ReducerStatus + EnergyQuanta
-for await tableEvent in client.tableEvents(named: "user") { … }
-for await rowEvent in client.rowEvents(table: "user") {
+for await event in await client.connectionEvents { … }                  // .connected/.reconnecting/.disconnected/.error
+for await reducer in await client.reducerEvents   { … }                 // ReducerEvent { requestId, reducerName, timestamp, outcome: ReducerOutcome }
+for await tableEvent in await client.tableEvents(named: "user") { … }
+for await rowEvent in await client.rowEvents(table: "user") {
     // PK-matched delete+insert pairs land as .updated(old:new:) automatically
 }
 
@@ -191,9 +189,16 @@ for await rowEvent in client.rowEvents(table: "user") {
 let sub = try await client.subscribe(["SELECT * FROM user"])
 try await sub.applied()
 // … work with rows …
-try await sub.unsubscribe()
+try await sub.unsubscribe()                              // or .unsubscribe(includeDroppedRows: true)
 
-// 4. BSATNRow protocol — one-line table registration
+// 4. callReducer — async/throws, returns the reducer's outcome
+let success = try await client.callReducer(SetNameReducer(userName: "Alice"))
+print("returned \(success.returnValue.count) bytes at \(success.timestamp)")
+
+// 5. callProcedure — non-transactional read-only RPCs (new in v2)
+let payload = try await client.callProcedure(name: "lookup_user", arguments: argBytes)
+
+// 6. BSATNRow protocol — one-line table registration
 struct UserRow: BSATNTableWithPrimaryKey {
     static let tableName = "user"
     let identity: UInt256
@@ -208,19 +213,19 @@ struct UserRow: BSATNTableWithPrimaryKey {
 }
 await client.registerTableRowDecoder(UserRow.self)
 
-// 5. Credentials persistence (Keychain on Apple, file fallback elsewhere)
+// 7. Credentials persistence (Keychain on Apple, file fallback elsewhere)
 try Credentials(token: tok, identity: id).save()
 let restored = try Credentials.load()
 
-// 6. Codegen: spacetime-swift generate
+// 8. Codegen: spacetime-swift generate
 //    spacetime-swift generate --uri https://maincloud.spacetimedb.com \
 //                              --db   my-module --out Sources/Generated/
 
-// 7. Optional SwiftUI mirror (separate library product)
+// 9. Optional SwiftUI mirror (separate library product)
 import SpacetimeDBObservation
 @Observable final class AppModel {
     let users: ObservableTable<UserRow>
-    init(client: SpacetimeDBClient) { self.users = ObservableTable(client: client) }
+    init(client: SpacetimeDBClient) async { self.users = await ObservableTable(client: client) }
 }
 ```
 
@@ -244,9 +249,9 @@ let client = try SpacetimeDBClient(
   debugEnabled: false    // Set to true for detailed logging
 )
 
-// Register table decoders
-await client.registerTableRowDecoder(table: "user", decoder: UserRowDecoder())
-await client.registerTableRowDecoder(table: "message", decoder: MessageRowDecoder())
+// Register table decoders (BSATNRow / BSATNTableWithPrimaryKey path)
+await client.registerTableRowDecoder(UserRow.self)
+await client.registerTableRowDecoder(MessageRow.self)
 
 // Connect with optional saved token and automatic reconnection
 try await client.connect(
@@ -261,15 +266,18 @@ try await client.connect(
 ```swift
 import SpacetimeDB
 
-// Subscribe to multiple tables
-let queryId = await client.nextQueryId
-try await client.subscribeMulti(
-    queries: ["SELECT * FROM user", "SELECT * FROM message"],
-    queryId: queryId
-)
+// Subscribe to one or more SQL queries; returns a typed handle.
+let sub = try await client.subscribe([
+    "SELECT * FROM user",
+    "SELECT * FROM message",
+])
 
-// Later, unsubscribe from the subscription
-try await client.unsubscribe(queryId: queryId)
+// Suspend until the server confirms with SubscribeApplied.
+try await sub.applied()
+
+// Later, unsubscribe. Pass includeDroppedRows: true to receive the
+// removed rows in the corresponding UnsubscribeApplied (v2 SendDroppedRows flag).
+try await sub.unsubscribe()
 ```
 
 ### Calling reducers
@@ -287,27 +295,57 @@ struct SetNameReducer: Reducer {
     }
 }
 
-// Call the reducer
-let reducer = SetNameReducer(userName: "Alice")
-let requestId = try await client.callReducer(reducer)
+// Call the reducer; suspends until the server responds with ReducerResult.
+do {
+    let success = try await client.callReducer(SetNameReducer(userName: "Alice"))
+    // success.returnValue: Data        — BSATN-encoded reducer return value
+    // success.timestamp:   Date        — server-side reducer start time
+    // success.transactionUpdate         — row diffs caused by this transaction
+} catch ReducerCallError.executionError(let payload) {
+    // typed error returned by the reducer (BSATN-encoded per its declared error type)
+    print("reducer rejected the call (\(payload.count) bytes)")
+} catch ReducerCallError.internalError(let message) {
+    // host-level failure (panic, type error, etc.)
+    print("reducer host error: \(message)")
+}
+```
+
+### Calling procedures (v2)
+
+Procedures are non-transactional read-only RPCs introduced in v2. Unlike
+reducers, they don't commit a transaction — the response is just a
+return value (or an error).
+
+```swift
+do {
+    let payload = try await client.callProcedure(name: "lookup_user", arguments: argBytes)
+    // payload is BSATN-encoded per the procedure's declared return type;
+    // user-level errors (Result/Option) ride inside `payload`.
+} catch ProcedureCallError.internalError(let message) {
+    // host-level failure: unknown procedure, type error, panic, etc.
+    print("procedure host error: \(message)")
+}
 ```
 
 ### Executing One-Off Queries
 ```swift
 import SpacetimeDB
 
-// Execute a single SQL query without subscription
-let result = try await client.oneOffQuery("SELECT * FROM user", timeout: 30.0)
+// Execute a single SQL query without establishing a subscription.
+// Returns rows grouped by table; throws on server-side errors or timeout.
+do {
+    let rows = try await client.oneOffQuery("SELECT * FROM user", timeout: 30.0)
 
-if let error = result.error {
-    print("Query failed: \(error)")
-} else {
-    // Decode rows using registered table decoders
-    let users: [UserRow] = await result.decodeRows(from: "user", using: client)
+    // Decode using the client's registered table decoder.
+    let users: [UserRow] = await client.decodeRows(from: rows, table: "user")
 
     for user in users {
         print("User: \(user.identity) \(user.name ?? "<unnamed>") \(user.online ? "online" : "offline")")
     }
+} catch OneOffQueryError.serverError(let message) {
+    print("Query failed: \(message)")
+} catch OneOffQueryError.timeout {
+    print("Query timed out")
 }
 ```
 
@@ -331,50 +369,43 @@ if let error = result.error {
 #### ❌ Not Yet Implemented
 - **Maps with non-String keys**: Currently only String keys are fully tested
 
-### SpacetimeDB Protocol Support
+### SpacetimeDB Protocol Support (v2)
+
+The SDK speaks the WebSocket subprotocol `v2.bsatn.spacetimedb`, matching
+the upstream Rust SDK's wire format. The v1 subprotocol is no longer
+supported.
 
 #### Client → Server Messages
 
-##### ✅ Implemented
-- **Subscribe**: Subscribe to SQL queries
-- **SubscribeMulti**: Subscribe to multiple SQL queries in one request
-- **UnsubscribeMulti**: Remove existing multi-query subscriptions
-- **CallReducer**: Call server-side reducer functions with BSATN-encoded arguments
-- **OneOffQuery**: Execute single queries without subscription
-- **ConnectionInit**: Initial connection setup with authentication
-
-##### ✅ Implemented
-- **Unsubscribe**: Remove single subscriptions
-
-##### ❌ Not Implemented
-- **RegisterTimer**: Schedule recurring operations
+| Tag  | Message       | Status |
+|------|---------------|--------|
+| 0x00 | Subscribe     | ✅ Implemented |
+| 0x01 | Unsubscribe   | ✅ Implemented (with `SendDroppedRows` flag) |
+| 0x02 | OneOffQuery   | ✅ Implemented |
+| 0x03 | CallReducer   | ✅ Implemented |
+| 0x04 | CallProcedure | ✅ Implemented (new in v2) |
 
 #### Server → Client Messages
 
-##### ✅ Implemented
-- **IdentityToken**: Receive authentication token and identity
-- **SubscribeMultiApplied**: Confirmation of multi-query subscription
-- **UnsubscribeMultiApplied**: Confirmation of multi-query unsubscription
-- **TransactionUpdate**: Database changes from reducer execution
-  - TableUpdate: Row insertions and deletions
-  - DatabaseUpdate: Batch of table updates
-  - ReducerCallResponse: Reducer execution status and energy usage
-- **QueryUpdate**: Initial data and updates for subscribed queries
-- **CompressibleQueryUpdate**: Wrapper for compression support (parsing only)
-- **OneOffQueryResponse**: Response to one-off queries
-
-##### ✅ Implemented
-- **SubscribeApplied**: Single subscription confirmation
-- **UnsubscribeApplied**: Single unsubscription confirmation
-
-##### ❌ Not Implemented
-- **Event**: Server-side event notifications
+| Tag  | Message            | Status |
+|------|--------------------|--------|
+| 0x00 | InitialConnection  | ✅ Implemented (replaces v1 IdentityToken + InitialSubscription) |
+| 0x01 | SubscribeApplied   | ✅ Implemented |
+| 0x02 | UnsubscribeApplied | ✅ Implemented |
+| 0x03 | SubscriptionError  | ✅ Implemented |
+| 0x04 | TransactionUpdate  | ✅ Implemented (other-client tx; row diffs only) |
+| 0x05 | OneOffQueryResult  | ✅ Implemented |
+| 0x06 | ReducerResult      | ✅ Implemented (self-tx with reducer return value) |
+| 0x07 | ProcedureResult    | ✅ Implemented |
 
 ### Compression Support
 
-- ✅ **Uncompressed**: Full support for uncompressed messages
-- ✅ **Brotli**: Full support (default compression, requires iOS 15+/macOS 12+)
-- ❌ **Gzip**: Not implemented (will throw error if attempted)
+v2 compresses entire `ServerMessage` frames at the WebSocket level
+(per-table `CompressibleQueryUpdate` from v1 is gone).
+
+- ✅ **Uncompressed**: Full support
+- ✅ **Brotli**: Full support — default; requires iOS 15+/macOS 12+
+- ✅ **Gzip**: Full support — RFC 1952 framing stripped, payload run through Apple's `COMPRESSION_ZLIB`
 
 ### WebSocket Features
 
@@ -387,71 +418,66 @@ if let error = result.error {
 
 ### Delegate Callbacks
 
-##### ✅ Implemented
-- `onConnect`: Connection established
-- `onDisconnect`: Connection lost
-- `onIdentityReceived`: Authentication completed
-- `onError`: Error occurred
-- `onIncomingMessage`: Raw message received (for debugging)
-- `onTableUpdate`: Database table changes with batched updates
-- `onReducerResponse`: Reducer execution results
-- `onSubscribeMultiApplied`: Multi-subscription ready
-- `onUnsubscribeMultiApplied`: Multi-unsubscription complete
-- `onReconnecting`: Reconnection attempt in progress
-- `onOneOffQueryResponse`: One-off query results
+The legacy `SpacetimeDBClientDelegate` is still available for callers who
+prefer callbacks over the AsyncStream surface. All methods have default
+no-op implementations — override only the ones you care about.
 
-##### ✅ Implemented
-- `onSubscribeApplied`: Single subscription ready
-- `onUnsubscribeApplied`: Single unsubscription complete
-
-##### ❌ Not Implemented
-- `onEvent`: Server event notifications
+| Method | Purpose |
+|--------|---------|
+| `onConnect(client:)` | WebSocket connection established |
+| `onDisconnect(client:)` | Connection lost |
+| `onReconnecting(client:attempt:)` | Auto-reconnect about to retry |
+| `onError(client:error:)` | Out-of-band error |
+| `onIncomingMessage(client:message:)` | Raw frame (debugging) |
+| `onIdentityReceived(client:token:identity:)` | `InitialConnection` received |
+| `onSubscribeApplied(client:queryId:)` | Server confirmed Subscribe |
+| `onUnsubscribeApplied(client:queryId:)` | Server confirmed Unsubscribe |
+| `onSubscriptionError(client:queryId:requestId:error:)` | Subscription failed |
+| `onTableUpdate(client:event:)` | Row diffs for one transaction (`TableEvent`) |
+| `onReducerResponse(client:requestId:reducerName:outcome:)` | `callReducer` returned (`ReducerOutcome`) |
+| `onProcedureResponse(client:requestId:procedureName:status:)` | `callProcedure` returned |
 
 ### Test Coverage
 
-The SDK now has comprehensive unit test coverage (92 tests) for all major components:
+The SDK has 192 tests across 26 suites (Swift Testing framework).
 
-**✅ Fully Tested (Message Protocol):**
-- **Request Encoding**: CallReducer, SubscribeMulti, UnsubscribeMulti, OneOffQuery
-- **Response Decoding**: SubscribeMultiApplied, UnsubscribeMultiApplied, OneOffQueryResponse
-- **BSATN Types**: All primitive types, arrays, products, and AlgebraicValues
-- **Large Integers**: UInt128, UInt256, Int128, Int256 with JSON encoding
-- **Core Infrastructure**: IdentityToken, BsatnRowList, CompressibleQueryUpdate
-- **Compression**: Unified compression enum with Brotli support
-- **Message Handling**: BSATNMessageHandler with various message types and error cases
-- **Binary Structure**: Exact byte-level verification of protocol messages
-- **Edge Cases**: Empty data, maximum values, unicode strings, large payloads
-- **Error Scenarios**: Invalid data, insufficient bytes, unsupported operations
+**✅ Covered:**
+- **v2 request encoding**: Subscribe, Unsubscribe (incl. `SendDroppedRows` flag), CallReducer, CallProcedure, OneOffQuery — exact byte-level binary verification
+- **v2 response decoding**: InitialConnection, SubscribeApplied, UnsubscribeApplied (with optional `QueryRows`), SubscriptionError, TransactionUpdate, OneOffQueryResult, ReducerResult, ProcedureResult
+- **Row formats**: `BsatnRowList` FixedSize and RowOffsets variants; `TableUpdateRows.persistent` and `.event` variants
+- **BSATN primitive types**: all integers (incl. UInt128/UInt256/Int128/Int256), Float32/Float64, Bool, String, arrays, products, sums
+- **Compression**: brotli round-trip, gzip round-trip via `/usr/bin/gzip` (incl. FNAME header handling)
+- **Event surface**: AsyncStream fan-out, race-free continuation registration, per-handle event filtering, PK-matched `.updated(old:new:)` row events
+- **Codegen**: emitted code type-checks against the SDK against both maincloud and a rich fixture
+- **Unicode + edge cases**: empty data, max values, unicode strings, large payloads
 
-**⚠️ Limited Testing:**
-- **Protocol Flow**: End-to-end connection lifecycle and subscription management
-- **Network Layer**: Connection failures, reconnection scenarios
-- **Concurrent Operations**: Multiple simultaneous requests and responses
+**⚠️ Limited:**
+- **Network layer**: connection failures, reconnection scenarios — verified manually against maincloud, no automated coverage
+- **Concurrent operations**: multiple in-flight requests on one client
 
 ### Known Limitations
 
-1. **Gzip Compression**: Gzip compression is not supported (Brotli and uncompressed work)
-2. **Large Messages**: No streaming support for very large messages
-3. **Server Events**: No support for server-side event notifications
-4. **Timers**: No support for server-side scheduled operations
-5. **Non-String Map Keys**: Maps/Dictionaries with non-String keys need more testing
+1. **No streaming for very large messages** — entire frame is buffered
+2. **Procedures are minimal** — supported on the wire, but reducer-style typed-arg ergonomics aren't yet built out
+3. **No SwiftUI property wrappers** beyond `ObservableTable`
+4. **Non-String map keys** — Dictionaries with non-String keys are not exercised
 
 ### Roadmap / TODO
 
-- [ ] Implement Gzip decompression
-- [x] ~~Implement Brotli decompression~~ ✅ Completed
-- [x] ~~Add automatic reconnection with exponential backoff~~ ✅ Completed
-- [x] ~~Add debug mode for detailed logging~~ ✅ Completed
-- [x] ~~Add connection heartbeat/keepalive~~ ✅ Completed (native URLSessionWebSocketTask support)
-- [x] ~~Implement multi-query unsubscribe functionality~~ ✅ Completed
-- [x] ~~Add one-off query support~~ ✅ Completed
-- [x] ~~Comprehensive unit tests for all protocol messages~~ ✅ Completed (92 tests)
-- [x] ~~Implement single-query unsubscribe~~ ✅ Completed
-- [ ] Implement server event handling
-- [ ] Support for timer registration
+- [x] ~~Implement Brotli decompression~~ ✅
+- [x] ~~Implement Gzip decompression~~ ✅
+- [x] ~~Add automatic reconnection with exponential backoff~~ ✅
+- [x] ~~Add debug mode for detailed logging~~ ✅
+- [x] ~~Add connection heartbeat/keepalive~~ ✅ (native URLSession ping/pong)
+- [x] ~~Implement single + multi unsubscribe~~ ✅ (collapsed into one in v2)
+- [x] ~~Add one-off query support~~ ✅
+- [x] ~~Comprehensive unit tests for all protocol messages~~ ✅ (192 tests)
+- [x] ~~Migrate to v2 protocol (`v2.bsatn.spacetimedb`)~~ ✅
+- [x] ~~Add `callProcedure` (v2)~~ ✅
+- [ ] Typed `Procedure` protocol mirroring `Reducer` for callProcedure ergonomics
 - [ ] Performance optimizations for large datasets
-- [ ] SwiftUI property wrappers for reactive updates
-- [ ] End-to-end integration tests
+- [ ] More SwiftUI property wrappers for reactive updates
+- [ ] End-to-end integration tests against a local SpacetimeDB instance
 
 ## Lessons learned
 
