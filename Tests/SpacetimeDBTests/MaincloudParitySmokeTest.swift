@@ -232,6 +232,37 @@ struct MaincloudParitySmokeTest {
     }
 
     @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
+    func phase13VariadicSubscribeAndEventContext() async throws {
+        // Variadic subscribe overload + EventContext wiring end-to-end.
+        try await withTimeout {
+            let client = try SpacetimeDBClient.builder()
+                .withUri(Self.host)
+                .withDatabaseName(Self.db)
+                .build()
+
+            await client.registerTableRowDecoder(UserRow.self)
+            await client.registerTableRowDecoder(MessageRow.self)
+            try await self.connectAndWait(client: client)
+            defer { Task { await client.disconnect() } }
+
+            // Variadic subscribe — no explicit array allocation.
+            let handle = try await client.subscribe(
+                UserRow.query(),
+                MessageRow.query()
+            )
+            try await handle.applied()
+
+            // EventContext can be hand-rolled around any user types.
+            struct LocalDb: Sendable {}
+            struct LocalReducers: Sendable {}
+            let context = EventContext(client: client, db: LocalDb(), reducers: LocalReducers())
+            #expect(await context.client.dbName == Self.db)
+
+            try await handle.unsubscribe()
+        }
+    }
+
+    @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
     func phase12LightModeReducerFireAndForget() async throws {
         try await withTimeout {
             // Light mode: callReducer returns immediately because the

@@ -244,6 +244,31 @@ struct CodegenEndToEndTests {
         #expect(src.contains("message: Table<MessageRow>(client: client)"))
     }
 
+    // MARK: Phase 13 — Reducers view + Db carries client/reducers/context
+
+    @Test func emitsReducersViewWithEachReducerAsMethod() throws {
+        let doc = try Self.loadSchema()
+        let src = SwiftEmitter(schema: doc).emit()["Db.swift"] ?? ""
+        #expect(src.contains("public struct Reducers: Sendable"))
+        #expect(src.contains("public let client: SpacetimeDBClient"))
+        // Reducer methods use the camelCased reducer name and forward
+        // to `client.callReducer(...)` with the typed reducer struct.
+        #expect(src.contains("public func sendMessage(text: String) async throws -> ReducerSuccess"))
+        #expect(src.contains("try await client.callReducer(SendMessageReducer(text: text))"))
+        #expect(src.contains("public func setName(nameArg: String) async throws -> ReducerSuccess"))
+        #expect(src.contains("try await client.callReducer(SetNameReducer(nameArg: nameArg))"))
+    }
+
+    @Test func dbExposesClientReducersAndContext() throws {
+        let doc = try Self.loadSchema()
+        let src = SwiftEmitter(schema: doc).emit()["Db.swift"] ?? ""
+        #expect(src.contains("public let client: SpacetimeDBClient"))
+        #expect(src.contains("public let reducers: Reducers"))
+        #expect(src.contains("public var context: EventContext<Db, Reducers>"))
+        // attach(to:) wires up reducers + tables together.
+        #expect(src.contains("reducers: Reducers(client: client)"))
+    }
+
     @Test func dbEmissionSkipsEventTables() throws {
         let doc = try Self.loadEventFixture()
         let src = SwiftEmitter(schema: doc).emit()["Db.swift"] ?? ""

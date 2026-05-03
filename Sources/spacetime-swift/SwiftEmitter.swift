@@ -68,7 +68,7 @@ struct SwiftEmitter {
         //    (event tables don't have a client cache).
         let cacheable = schema.tables.filter { !$0.isEvent }
         if !cacheable.isEmpty {
-            files["Db.swift"] = emitDb(tables: cacheable)
+            files["Db.swift"] = emitDb(tables: cacheable, reducers: schema.reducers.filter { !$0.isLifecycle })
         }
 
         return files
@@ -76,7 +76,7 @@ struct SwiftEmitter {
 
     // MARK: Db (typed table accessor) emission
 
-    private func emitDb(tables: [TableDef]) -> String {
+    private func emitDb(tables: [TableDef], reducers: [ReducerDef]) -> String {
         struct Field {
             let fieldName: String
             let typeName: String
@@ -87,17 +87,64 @@ struct SwiftEmitter {
         }
 
         var src = preamble
+
+        // Reducers — typed wrapper exposing each non-lifecycle reducer
+        // as `db.reducers.<camelName>(...)`. Mirrors TS v3's
+        // `connection.reducers.<camelName>(args)` shape.
+        src += "/// Typed reducer accessor. Mirrors the TS v3\n"
+        src += "/// `connection.reducers.<reducerName>(...)` shape — each\n"
+        src += "/// method wraps the matching `<Name>Reducer` struct and\n"
+        src += "/// forwards to `client.callReducer(_:)`.\n"
+        src += "public struct Reducers: Sendable {\n"
+        src += "    public let client: SpacetimeDBClient\n"
+        src += "    public init(client: SpacetimeDBClient) { self.client = client }\n"
+        for reducer in reducers {
+            let typeName = swiftTypeName(reducer.name) + "Reducer"
+            // Reuse the same name-collision rules SwiftEmitter applies
+            // when emitting <Name>Reducer.swift so call sites match.
+            let reservedReducerMembers: Set<String> = ["name", "encodeArguments"]
+            let names = namedTypes
+            let params = reducer.params.elements.enumerated().map { index, el -> Column in
+                var fieldName = swiftFieldName(el.name.value ?? "arg\(index)")
+                if reservedReducerMembers.contains(fieldName) {
+                    fieldName += "Arg"
+                }
+                return Column(
+                    index: index,
+                    fieldName: fieldName,
+                    kind: SwiftKind.from(el.algebraicType, namedTypes: names)
+                )
+            }
+            let methodName = swiftFieldName(reducer.name)
+            src += "\n    @discardableResult\n"
+            src += "    public func \(methodName)("
+            src += params.map { "\($0.fieldName): \($0.kind.swiftType)" }.joined(separator: ", ")
+            src += ") async throws -> ReducerSuccess {\n"
+            src += "        try await client.callReducer(\(typeName)("
+            src += params.map { "\($0.fieldName): \($0.fieldName)" }.joined(separator: ", ")
+            src += "))\n"
+            src += "    }\n"
+        }
+        src += "}\n\n"
+
+        // Db — typed table accessor + reducers + context.
         src += "/// Typed accessor for every cacheable table in this module.\n"
         src += "/// Mirrors the TS v3 `connection.db.<tableName>` shape: each\n"
         src += "/// property is a live `Table<Row>` whose cache, callbacks,\n"
         src += "/// and PK lookups are wired to the underlying client.\n"
         src += "public struct Db: Sendable {\n"
+        src += "    public let client: SpacetimeDBClient\n"
+        src += "    public let reducers: Reducers\n"
         for field in fields {
             src += "    public let \(field.fieldName): Table<\(field.typeName)>\n"
         }
-        src += "\n    public init("
-        src += fields.map { "\($0.fieldName): Table<\($0.typeName)>" }.joined(separator: ", ")
+        src += "\n    public init(client: SpacetimeDBClient, reducers: Reducers"
+        for field in fields {
+            src += ", \(field.fieldName): Table<\(field.typeName)>"
+        }
         src += ") {\n"
+        src += "        self.client = client\n"
+        src += "        self.reducers = reducers\n"
         for field in fields {
             src += "        self.\(field.fieldName) = \(field.fieldName)\n"
         }
@@ -111,11 +158,19 @@ struct SwiftEmitter {
             src += "        await client.registerTableRowDecoder(\(field.typeName).self)\n"
         }
         src += "        return await Db(\n"
+        src += "            client: client,\n"
+        src += "            reducers: Reducers(client: client),\n"
         for (i, field) in fields.enumerated() {
             let comma = i == fields.count - 1 ? "" : ","
             src += "            \(field.fieldName): Table<\(field.typeName)>(client: client)\(comma)\n"
         }
         src += "        )\n"
+        src += "    }\n"
+        src += "\n    /// Snapshot of the per-event context for callbacks\n"
+        src += "    /// that want typed access to `db` and `reducers`\n"
+        src += "    /// without capturing the surrounding scope.\n"
+        src += "    public var context: EventContext<Db, Reducers> {\n"
+        src += "        EventContext(client: client, db: self, reducers: reducers)\n"
         src += "    }\n"
         src += "}\n"
         return src

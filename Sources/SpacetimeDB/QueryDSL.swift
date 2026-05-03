@@ -257,4 +257,14 @@ public extension SpacetimeDBClient {
     func subscribe(queries: [any SpacetimeQuery]) async throws -> SubscriptionHandle {
         try await subscribe(queries.map { $0.toSQL() })
     }
+
+    /// Variadic shorthand for `subscribe(queries:)`. Lets callers write:
+    ///
+    ///     try await client.subscribe(UserRow.query(), MessageRow.query())
+    ///
+    /// instead of building an explicit array.
+    @discardableResult
+    func subscribe(_ queries: any SpacetimeQuery...) async throws -> SubscriptionHandle {
+        try await subscribe(queries: queries)
+    }
 }
