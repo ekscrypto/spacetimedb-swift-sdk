@@ -3,6 +3,17 @@
 
 import PackageDescription
 
+// Locks every target to Swift 6 language mode and opts into the
+// `SendableMetatype` upcoming feature so that generic metatype captures
+// across actor boundaries (e.g. `R.Type` in a `@Sendable` closure) are
+// checked at compile time. Together these match the behaviour of
+// `-strict-concurrency=complete` without using `.unsafeFlags`, so
+// downstream consumers do not see SwiftPM unsafe-flag warnings.
+let strictConcurrency: [SwiftSetting] = [
+    .swiftLanguageMode(.v6),
+    .enableUpcomingFeature("SendableMetatype"),
+]
+
 let package = Package(
     name: "spacetimedb-swift-sdk",
     platforms: [
@@ -31,37 +42,45 @@ let package = Package(
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
-            name: "BSATN"),
+            name: "BSATN",
+            swiftSettings: strictConcurrency),
         .target(
             name: "SpacetimeDB",
-            dependencies: ["BSATN"]),
+            dependencies: ["BSATN"],
+            swiftSettings: strictConcurrency),
         .target(
             name: "SpacetimeDBObservation",
-            dependencies: ["SpacetimeDB", "BSATN"]),
+            dependencies: ["SpacetimeDB", "BSATN"],
+            swiftSettings: strictConcurrency),
         .executableTarget(
             name: "quickstart-chat",
             dependencies: ["SpacetimeDB", "BSATN"],
-            swiftSettings: [
+            swiftSettings: strictConcurrency + [
                 .unsafeFlags(["-parse-as-library"])
             ]),
         .executableTarget(
-            name: "spacetime-swift"),
+            name: "spacetime-swift",
+            swiftSettings: strictConcurrency),
         .testTarget(
             name: "SpacetimeSwiftCodegenTests",
             dependencies: ["spacetime-swift"],
-            resources: [.process("Fixtures")]
+            resources: [.process("Fixtures")],
+            swiftSettings: strictConcurrency
         ),
         .testTarget(
             name: "SpacetimeDBTests",
-            dependencies: ["SpacetimeDB"]
+            dependencies: ["SpacetimeDB"],
+            swiftSettings: strictConcurrency
         ),
         .testTarget(
             name: "BSATNTests",
-            dependencies: ["BSATN"]
+            dependencies: ["BSATN"],
+            swiftSettings: strictConcurrency
         ),
         .testTarget(
             name: "SpacetimeDBObservationTests",
-            dependencies: ["SpacetimeDBObservation", "SpacetimeDB", "BSATN"]
+            dependencies: ["SpacetimeDBObservation", "SpacetimeDB", "BSATN"],
+            swiftSettings: strictConcurrency
         ),
     ]
 )

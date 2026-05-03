@@ -2,7 +2,7 @@
 
 [![Swift](https://github.com/ekscrypto/spacetimedb-swift-sdk/actions/workflows/swift.yml/badge.svg)](https://github.com/ekscrypto/spacetimedb-swift-sdk/actions/workflows/swift.yml)
 [![Markdown Links](https://github.com/ekscrypto/spacetimedb-swift-sdk/actions/workflows/markdown-link-check.yml/badge.svg)](https://github.com/ekscrypto/spacetimedb-swift-sdk/actions/workflows/markdown-link-check.yml)
-[![Swift Version](https://img.shields.io/badge/Swift-5.9+-orange.svg)](https://swift.org)
+[![Swift Version](https://img.shields.io/badge/Swift-6.1+-orange.svg)](https://swift.org)
 [![Platform](https://img.shields.io/badge/Platforms-iOS%2015.0+%20|%20macOS%2012.0+-blue.svg)](https://developer.apple.com)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -61,11 +61,9 @@ targets: [
 
 ### System Requirements
 
-- **Swift**: 5.9 or later
-- **Platforms**:
-  - iOS 15.0+ / macOS 12.0+ (for Brotli compression support)
-  - iOS 13.0+ / macOS 10.15+ (without compression)
-- **Xcode**: 15.0 or later (recommended)
+- **Swift**: 6.1 or later (the package builds in Swift 6 language mode with strict concurrency checking — the `SendableMetatype` upcoming feature is enabled on every target so generic metatype captures across actor boundaries are caught at compile time)
+- **Platforms**: iOS 15.0+ / macOS 12.0+ (Brotli compression requires these minimums)
+- **Xcode**: 16.3 or later (ships Swift 6.1)
 
 ## Sample Application: Quickstart Chat
 

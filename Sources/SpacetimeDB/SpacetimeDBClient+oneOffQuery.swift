@@ -31,10 +31,10 @@ extension SpacetimeDBClient {
                     try await webSocketTask.send(.data(payload))
                     Task {
                         try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                        await self.timeoutOneOffQuery(requestId: requestId)
+                        self.timeoutOneOffQuery(requestId: requestId)
                     }
                 } catch {
-                    await self.failOneOffQuery(requestId: requestId, error: error)
+                    self.failOneOffQuery(requestId: requestId, error: error)
                 }
             }
         }

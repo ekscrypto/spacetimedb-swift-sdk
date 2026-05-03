@@ -78,7 +78,7 @@ actor StreamsChat {
                 switch event {
                 case .connected(let identity, let connectionId, let token):
                     print("🆔 Identity: \(identity.abbreviated)…  conn=\(connectionId.abbreviated)")
-                    try? Credentials(token: token, identity: identity).save(to: await self.credentialsURL)
+                    try? Credentials(token: token, identity: identity).save(to: self.credentialsURL)
                     await self.recordIdentity(identity)
                 case .reconnecting(let attempt):
                     print("🔄 Reconnecting (attempt \(attempt)/10)…")

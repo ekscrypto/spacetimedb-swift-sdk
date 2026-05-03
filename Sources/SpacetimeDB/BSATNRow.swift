@@ -16,7 +16,13 @@ import BSATN
 
 /// Adopt on a struct that mirrors a SpacetimeDB table row. The single
 /// requirement is `init(reader:)` — read each field in declared order.
-public protocol BSATNRow {
+///
+/// Inherits `SendableMetatype` so that `R.Type` / `Self.Type` can cross
+/// actor boundaries inside `@Sendable` closures (e.g. the per-row
+/// continuation forwarder). Concrete row structs satisfy this for free;
+/// the constraint is only required because we use the protocol as a
+/// generic bound.
+public protocol BSATNRow: SendableMetatype {
     init(reader: BSATNReader) throws
     static var tableName: String { get }
 }
