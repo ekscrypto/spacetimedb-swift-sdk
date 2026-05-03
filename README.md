@@ -71,7 +71,7 @@ This repository includes a fully functional chat application demonstrating Space
 
 ### Running the Chat Client
 
-1. First, set up the SpacetimeDB server with the quickstart-chat module following the [official tutorial](https://spacetimedb.com/docs/getting-started)
+1. First, set up the SpacetimeDB server with the quickstart-chat module following the [official tutorial](https://spacetimedb.com/docs/)
 2. Build and run the Swift client:
    ```bash
    swift build
@@ -157,10 +157,9 @@ The Swift chat client implements all core features from the official tutorials, 
 
 ### Related Implementations
 
-For comparison and reference, see the official SpacetimeDB quickstart tutorials:
-- [Rust Tutorial](https://spacetimedb.com/docs/sdks/rust/quickstart)
-- [TypeScript Tutorial](https://spacetimedb.com/docs/sdks/typescript/quickstart)
-- [Server Module Tutorial](https://spacetimedb.com/docs/modules/rust/quickstart)
+For comparison and reference, see the official SpacetimeDB quickstart tutorials (each Rust quickstart covers both the server module and the client SDK):
+- [Rust Quickstart](https://spacetimedb.com/docs/quickstarts/rust)
+- [TypeScript Quickstart](https://spacetimedb.com/docs/quickstarts/typescript)
 
 ## Usage
 
