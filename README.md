@@ -11,10 +11,15 @@ SDK to connect to SpacetimeDB from Swift
 This is a community project and is not an official SDK supported by Clockwork Labs.
 For more information about SpacetimeDB, visit https://spacetimedb.com
 
-STATUS: Alpha — speaks SpacetimeDB WebSocket protocol **v2.bsatn.spacetimedb**.
-Core surface (subscribe, callReducer, callProcedure, oneOffQuery, AsyncStream events,
-auto-reconnect, gzip+brotli decompression) is implemented and verified end-to-end
-against `maincloud.spacetimedb.com`. Production use not recommended yet.
+STATUS: Beta — speaks SpacetimeDB WebSocket protocol **v2.bsatn.spacetimedb**.
+Feature-complete against the upstream Rust SDK (subscribe, callReducer, callProcedure,
+oneOffQuery, AsyncStream events, typed `Table<Row>` view, `EventContext`,
+`DbConnectionBuilder`, codegen, auto-reconnect, gzip+brotli decompression) and verified
+end-to-end against `maincloud.spacetimedb.com`. 192 tests across 26 suites; Swift 6
+strict concurrency. Remaining gaps: automated coverage for network failures and
+concurrent in-flight requests, and live testing of `BSATNEventRow` (blocked on the
+upstream `event` table flag shipping in a `spacetimedb` crate release). API is
+stabilizing — no production deployments to vouch for yet.
 
 ## Installation
 
