@@ -92,8 +92,8 @@ let client = try SpacetimeDBClient(
 
 **Compression options (Sources/BSATN/Compression.swift):**
 - `.none` (rawValue: 0) - No compression
-- `.brotli` (rawValue: 2) - Brotli compression (requires iOS 15+/macOS 12+) - **Default and recommended**
-- `.gzip` (rawValue: 1) - Not currently supported (will throw an error)
+- `.brotli` (rawValue: 1) - Brotli compression (requires iOS 15+/macOS 12+) - **Default and recommended**
+- `.gzip` (rawValue: 2) - Full RFC 1952 support (framing stripped, raw DEFLATE payload run through Apple's `COMPRESSION_ZLIB`)
 
 The SDK automatically handles both protocol-level compression (entire messages) and data-level compression (query updates within messages). The Compression enum provides `serverString` for WebSocket negotiation and raw values for protocol messages.
 
@@ -169,7 +169,7 @@ Debug mode is **disabled by default** to keep console output clean in production
 
 ### Current Known Issues
 
-1. **Gzip compression** is not implemented (Brotli and uncompressed messages work)
+1. ~~Gzip compression is not implemented~~ ✅ **Fixed** - Full RFC 1952 support via `MessageDecompression.gzip` (Phase 15 confirmed)
 2. ~~No automatic reconnection on connection loss~~ ✅ **Fixed** - Auto-reconnect with exponential backoff
 3. ~~Cannot unsubscribe from queries once subscribed~~ ✅ **Fixed** - Both single and multi unsubscribe implemented and tested
 4. ~~No heartbeat/keepalive mechanism~~ ✅ **Fixed** - Native URLSessionWebSocketTask ping/pong
