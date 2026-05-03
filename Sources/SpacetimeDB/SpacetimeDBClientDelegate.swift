@@ -32,6 +32,14 @@ public protocol SpacetimeDBClientDelegate: AnyObject, Sendable {
     
     // Called when an unsubscribe request is confirmed
     func onUnsubscribeApplied(client: SpacetimeDBClient, queryId: UInt32) async
+
+    // Called when the server reports a subscription-lifecycle error.
+    // queryId/tableId may be nil — see SubscriptionErrorMessage for semantics.
+    func onSubscriptionError(client: SpacetimeDBClient, queryId: UInt32?, tableId: UInt32?, error: String) async
+
+    // Called for a TransactionUpdateLight — table diffs without reducer event metadata.
+    // Per-table row diffs are still delivered via onTableUpdate.
+    func onTransactionUpdateLight(client: SpacetimeDBClient, requestId: UInt32) async
 }
 
 // Default implementation for optional delegate methods
@@ -39,12 +47,20 @@ public extension SpacetimeDBClientDelegate {
     func onOneOffQueryResponse(client: SpacetimeDBClient, result: OneOffQueryResult) async {
         // Default empty implementation
     }
-    
+
     func onUnsubscribeApplied(client: SpacetimeDBClient, queryId: UInt32) async {
         // Default empty implementation
     }
-    
+
     func onSubscribeApplied(client: SpacetimeDBClient, queryId: UInt32) {
+        // Default empty implementation
+    }
+
+    func onSubscriptionError(client: SpacetimeDBClient, queryId: UInt32?, tableId: UInt32?, error: String) async {
+        // Default empty implementation
+    }
+
+    func onTransactionUpdateLight(client: SpacetimeDBClient, requestId: UInt32) async {
         // Default empty implementation
     }
 }

@@ -480,11 +480,62 @@ extension SpacetimeDBClient {
                 // Read UnsubscribeMultiAppliedMessage
                 let unsubscribeMultiApplied = try UnsubscribeMultiAppliedMessage(reader: reader)
                 debugLog(">>> UnsubscribeMultiApplied received for queryId: \(unsubscribeMultiApplied.queryId)")
-                
+
                 await clientDelegate?.onUnsubscribeApplied(client: self, queryId: unsubscribeMultiApplied.queryId)
+            } else if messageTag == Tags.ServerMessage.subscriptionError.rawValue {
+                let subscriptionError = try SubscriptionErrorMessage(reader: reader)
+                await clientDelegate?.onSubscriptionError(
+                    client: self,
+                    queryId: subscriptionError.queryId,
+                    tableId: subscriptionError.tableId,
+                    error: subscriptionError.error
+                )
+            } else if messageTag == Tags.ServerMessage.transactionUpdateLight.rawValue {
+                let transactionUpdateLight = try TransactionUpdateLightMessage(reader: reader)
+                await processDatabaseUpdate(transactionUpdateLight.update)
+                await clientDelegate?.onTransactionUpdateLight(
+                    client: self,
+                    requestId: transactionUpdateLight.requestId
+                )
             }
         } catch {
             debugLog(">>> Failed to decode: \(error)")
+        }
+    }
+
+    /// Decode and dispatch row diffs from a DatabaseUpdate to registered table decoders.
+    /// Used by both TransactionUpdate and TransactionUpdateLight paths.
+    private func processDatabaseUpdate(_ update: DatabaseUpdate) async {
+        for tableUpdate in update.tableUpdates {
+            do {
+                let queryUpdate = try tableUpdate.getQueryUpdate()
+                guard let decoder = decoder(forTable: tableUpdate.name) else {
+                    debugLog(">>> No decoder registered for table: \(tableUpdate.name)")
+                    continue
+                }
+                var insertedRows: [Any] = []
+                for row in queryUpdate.inserts.rows where !row.isEmpty {
+                    let rowReader = BSATNReader(data: row, debugEnabled: debugEnabled)
+                    let modelValue = try rowReader.readAlgebraicValue(as: .product(decoder.model))
+                    guard case .product(let values) = modelValue else { continue }
+                    insertedRows.append(try decoder.decode(modelValues: values))
+                }
+                var deletedRows: [Any] = []
+                for row in queryUpdate.deletes.rows where !row.isEmpty {
+                    let rowReader = BSATNReader(data: row, debugEnabled: debugEnabled)
+                    let modelValue = try rowReader.readAlgebraicValue(as: .product(decoder.model))
+                    guard case .product(let values) = modelValue else { continue }
+                    deletedRows.append(try decoder.decode(modelValues: values))
+                }
+                await clientDelegate?.onTableUpdate(
+                    client: self,
+                    table: tableUpdate.name,
+                    deletes: deletedRows,
+                    inserts: insertedRows
+                )
+            } catch {
+                debugLog(">>> Error processing table update for \(tableUpdate.name): \(error)")
+            }
         }
     }
 
