@@ -316,16 +316,25 @@ struct CodegenEndToEndTests {
         }
         let buildRoot = modulesDir.deletingLastPathComponent()
 
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = [
+        // On macOS the bare `swiftc` binary (e.g. from swift-actions/setup-swift)
+        // doesn't auto-resolve the platform SDK, so Foundation imports fail to
+        // type-check. Resolve the macOS SDK via `xcrun` and pass it explicitly.
+        var args: [String] = [
             "swiftc",
             "-typecheck",
             "-I", modulesDir.path,
             "-I", buildRoot.path,
             "-L", buildRoot.path,
             "-module-name", "GeneratedCheck",
-        ] + files.keys.sorted().map { tmp.appendingPathComponent($0).path }
+        ]
+        if let sdkPath = Self.macosxSDKPath() {
+            args.append(contentsOf: ["-sdk", sdkPath])
+        }
+        args.append(contentsOf: files.keys.sorted().map { tmp.appendingPathComponent($0).path })
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        proc.arguments = args
         let stderr = Pipe()
         proc.standardError = stderr
         proc.standardOutput = Pipe()
@@ -335,6 +344,26 @@ struct CodegenEndToEndTests {
         if proc.terminationStatus != 0 {
             let data = stderr.fileHandleForReading.readDataToEndOfFile()
             Issue.record("swiftc -typecheck failed: \(String(data: data, encoding: .utf8) ?? "<no output>")")
+        }
+    }
+
+    private static func macosxSDKPath() -> String? {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        proc.arguments = ["xcrun", "--sdk", "macosx", "--show-sdk-path"]
+        let out = Pipe()
+        proc.standardOutput = out
+        proc.standardError = Pipe()
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            guard proc.terminationStatus == 0 else { return nil }
+            let data = out.fileHandleForReading.readDataToEndOfFile()
+            let path = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return (path?.isEmpty == false) ? path : nil
+        } catch {
+            return nil
         }
     }
 }
