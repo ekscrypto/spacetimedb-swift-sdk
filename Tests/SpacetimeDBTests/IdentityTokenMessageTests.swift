@@ -23,7 +23,7 @@ struct IdentityTokenMessageTests {
 
         #expect(message.identity == identity)
         #expect(message.token == token)
-        #expect(message.connectionId == connectionId)
+        #expect(message.connectionId.raw == connectionId)
     }
 
     @Test("IdentityTokenMessage with empty token")
@@ -41,7 +41,7 @@ struct IdentityTokenMessageTests {
 
         #expect(message.identity == identity)
         #expect(message.token == "")
-        #expect(message.connectionId == connectionId)
+        #expect(message.connectionId.raw == connectionId)
     }
 
     @Test("IdentityTokenMessage with AlgebraicValue")
@@ -70,6 +70,6 @@ struct IdentityTokenMessageTests {
 
         #expect(message.identity == identity)
         #expect(message.token == token)
-        #expect(message.connectionId == connectionId)
+        #expect(message.connectionId.raw == connectionId)
     }
 }

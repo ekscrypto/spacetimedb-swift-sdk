@@ -11,7 +11,7 @@ import BSATN
 struct IdentityTokenMessage {
     let identity: UInt256
     let token: String
-    let connectionId: BSATN.UInt128
+    let connectionId: ConnectionId
 
     struct Model: ProductModel {
         var definition: [AlgebraicValueType] { [
@@ -32,6 +32,6 @@ struct IdentityTokenMessage {
         }
         self.identity = identity
         self.token = token
-        self.connectionId = connectionId
+        self.connectionId = ConnectionId(connectionId)
     }
 }
