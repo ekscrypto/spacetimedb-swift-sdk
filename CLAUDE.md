@@ -65,6 +65,7 @@ swift build
    echo "/quit" | env SPACETIMEDB_HOST=https://maincloud.spacetimedb.com SPACETIMEDB_DB=quickstart-chat-55kji swift run quickstart-chat
    ```
    Connection-only is read-safe; reducer calls (`/name`, send-message) post to a shared module — get explicit user authorization before doing more than connect+subscribe.
+7. **`swiftpm-testing-helper` SIGSEGV/SIGBUS on incremental builds**: when adding/removing public methods on classes consumed by the test bundle (notably `BSATNWriter`, `BSATNReader`), incremental rebuilds can leave the test xctest binary linked against a stale class layout. The helper then crashes (SIGSEGV/SIGBUS) inside `_ArrayBuffer.count.getter` when running the stale bundle. Tests themselves are fine. Workaround: `rm -rf .build && swift test` after such changes. Report this to swift.org if it reproduces on a non-macOS-26 toolchain.
 
 ### Compression Support
 
