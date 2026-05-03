@@ -10,8 +10,22 @@
 //      tag: u8  (0 = Nil, 1 = V4, 2 = V7, 3 = Max)
 //      payload: u128
 //
-//  The variant byte preserves UUID version semantics so both server
-//  and client can reason about freshness without a second round trip.
+//  Per RFC 9562:
+//    • The Nil UUID (§5.9) and Max UUID (§5.10) are special-case
+//      values — explicitly all-zeros and all-ones bytes respectively,
+//      with no version or variant fields. `Uuid.zero` / `Uuid.allOnes`
+//      below are the canonical instances.
+//    • V4 and V7 payloads, however, MUST have specific version and
+//      variant bits set: byte 6 high nibble = 0x40 (v4) or 0x70 (v7),
+//      and byte 8 high two bits = 0b10 (RFC 4122 variant). The SDK
+//      does NOT enforce or compute these — clients are expected to
+//      receive well-formed UUIDs from the server (which generates
+//      them with the correct bits) and to round-trip them as opaque
+//      u128 payloads. If you need to construct a fresh UUID
+//      client-side, use Apple's `UUID()` and pass its raw bytes
+//      through; the BSATN-vs-canonical byte ordering is intentionally
+//      not addressed at this layer until the server's exact wire
+//      shape for `Uuid` is documented in the upstream protocol spec.
 //
 
 import Foundation
@@ -39,10 +53,13 @@ public enum Uuid: Sendable, Equatable, Hashable, Codable {
         }
     }
 
-    /// All-zero Uuid (RFC 4122 nil UUID, often used as a sentinel).
+    /// All-zeros Uuid (RFC 9562 §5.9 Nil UUID — explicitly defined
+    /// as a valid special-case value with no version/variant field).
     public static let zero: Uuid = .nil_(UInt128(u0: 0, u1: 0))
 
-    /// All-ones Uuid (RFC 4122 max UUID, sentinel for upper bounds).
+    /// All-ones Uuid (RFC 9562 §5.10 Max UUID — explicitly defined
+    /// as a valid special-case value, often used as an upper-bound
+    /// sentinel in range queries).
     public static let allOnes: Uuid = .max(UInt128(u0: .max, u1: .max))
 }
 
