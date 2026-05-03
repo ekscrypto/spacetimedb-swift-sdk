@@ -35,9 +35,17 @@ public enum UnsubscribeFlags: UInt8, Sendable {
     func encode(to writer: BSATNWriter) { writer.write(rawValue) }
 }
 
-/// Reserved flags for `CallReducer`. Currently a single `default = 0` variant.
+/// Flags carried in a v2 `CallReducer` message.
+///   - `default` (0): server emits a full `TransactionUpdate` echoing the
+///     reducer's row diffs back to the caller (the standard path).
+///   - `noSuccessNotify` (1): light-mode flag — on success, the server
+///     suppresses the `TransactionUpdate` echo back to *this* client.
+///     Other clients still receive the diffs through their own
+///     subscriptions. Errors (`.error` / `.internalError`) are still
+///     reported back so the caller can react.
 public enum CallReducerFlags: UInt8, Sendable {
     case `default` = 0
+    case noSuccessNotify = 1
 
     init(reader: BSATNReader) throws {
         let raw: UInt8 = try reader.read()

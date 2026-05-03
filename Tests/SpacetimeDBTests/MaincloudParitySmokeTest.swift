@@ -90,115 +90,177 @@ struct MaincloudParitySmokeTest {
         }
     }
 
+    /// Bound a live-network test body so a stalled server (or a buggy
+    /// SDK path) can't hold the test runner forever. The default budget
+    /// is 20s — every test in this suite normally finishes in <1s, so
+    /// hitting this limit is a real failure.
+    private func withTimeout<T: Sendable>(
+        seconds: TimeInterval = 20,
+        _ body: @Sendable @escaping () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await body() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw NSError(
+                    domain: "ParitySmoke",
+                    code: 99,
+                    userInfo: [NSLocalizedDescriptionKey: "test exceeded \(seconds)s budget"]
+                )
+            }
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
+    }
+
     // MARK: Tests
 
     @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
     func typedProcedureRoundTrip() async throws {
-        let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
-        try await connectAndWait(client: client)
-        defer { Task { await client.disconnect() } }
+        try await withTimeout {
+            let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
+            try await self.connectAndWait(client: client)
+            defer { Task { await client.disconnect() } }
 
-        let returned = try await client.callProcedure(EchoProcedure(value: 12345))
-        #expect(returned == 12345)
+            let returned = try await client.callProcedure(EchoProcedure(value: 12345))
+            #expect(returned == 12345)
+        }
     }
 
     @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
     func typedQueryDSLAppliedAndUnsubscribed() async throws {
-        let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
-        await client.registerTableRowDecoder(UserRow.self)
-        await client.registerTableRowDecoder(MessageRow.self)
-        try await connectAndWait(client: client)
-        defer { Task { await client.disconnect() } }
+        try await withTimeout {
+            let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
+            await client.registerTableRowDecoder(UserRow.self)
+            await client.registerTableRowDecoder(MessageRow.self)
+            try await self.connectAndWait(client: client)
+            defer { Task { await client.disconnect() } }
 
-        // Subscribe via the typed DSL (UserRow.query() + filtered MessageRow).
-        let queries: [any SpacetimeQuery] = [
-            UserRow.query(),
-            MessageRow.query(),
-        ]
-        let handle = try await client.subscribe(queries: queries)
-        try await handle.applied()
-        try await handle.unsubscribe()
+            let queries: [any SpacetimeQuery] = [
+                UserRow.query(),
+                MessageRow.query(),
+            ]
+            let handle = try await client.subscribe(queries: queries)
+            try await handle.applied()
+            try await handle.unsubscribe()
+        }
     }
 
     @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
     func clientMetricsCountsInboundFrames() async throws {
-        await ClientMetrics.shared.reset()
+        try await withTimeout {
+            await ClientMetrics.shared.reset()
 
-        let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
-        try await connectAndWait(client: client)
-        defer { Task { await client.disconnect() } }
+            let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
+            try await self.connectAndWait(client: client)
+            defer { Task { await client.disconnect() } }
 
-        // Force at least one round-trip (procedure call → ProcedureResult).
-        _ = try await client.callProcedure(EchoProcedure(value: 1))
+            _ = try await client.callProcedure(EchoProcedure(value: 1))
 
-        let snap = try #require(await ClientMetrics.shared.snapshot(db: Self.db))
-        #expect(snap.messagesReceived >= 2)        // InitialConnection + ProcedureResult
-        #expect(snap.bytesReceived > 0)
-        // At least one bucket non-empty.
-        #expect(snap.bucketCounts.contains { $0 > 0 } || snap.bucketOverflowCount > 0)
+            let snap = try #require(await ClientMetrics.shared.snapshot(db: Self.db))
+            #expect(snap.messagesReceived >= 2)
+            #expect(snap.bytesReceived > 0)
+            #expect(snap.bucketCounts.contains { $0 > 0 } || snap.bucketOverflowCount > 0)
+        }
     }
 
     @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
     func filteredQueryDSLEndToEnd() async throws {
-        // Pick a filter that's guaranteed to evaluate (online = TRUE).
-        // Verifies the WHERE clause survives the wire round-trip.
-        let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
-        await client.registerTableRowDecoder(UserRow.self)
-        try await connectAndWait(client: client)
-        defer { Task { await client.disconnect() } }
+        try await withTimeout {
+            let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
+            await client.registerTableRowDecoder(UserRow.self)
+            try await self.connectAndWait(client: client)
+            defer { Task { await client.disconnect() } }
 
-        let q = UserRow.query().filter { $0.col("online", Bool.self).isTrue }
-        let handle = try await client.subscribe(queries: [q])
-        try await handle.applied()
-        try await handle.unsubscribe()
+            let q = UserRow.query().filter { $0.col("online", Bool.self).isTrue }
+            let handle = try await client.subscribe(queries: [q])
+            try await handle.applied()
+            try await handle.unsubscribe()
+        }
     }
 
     @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
     func phase11TypedTableCachePopulatesAfterSubscribe() async throws {
-        // Verifies that the Phase 11 `Table<Row>` view is wired up to
-        // the live row-event stream: after `applied()`, the user table's
-        // cache should contain at least the rows the parity test
-        // module ships with.
-        let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
-        await client.registerTableRowDecoder(UserRow.self)
-        await client.registerTableRowDecoder(MessageRow.self)
-        try await connectAndWait(client: client)
-        defer { Task { await client.disconnect() } }
+        try await withTimeout {
+            let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
+            await client.registerTableRowDecoder(UserRow.self)
+            await client.registerTableRowDecoder(MessageRow.self)
+            try await self.connectAndWait(client: client)
+            defer { Task { await client.disconnect() } }
 
-        let users = await Table<UserRow>(client: client)
-        let messages = await Table<MessageRow>(client: client)
+            let users = await Table<UserRow>(client: client)
+            let messages = await Table<MessageRow>(client: client)
 
-        let handle = try await client.subscribe([
-            "SELECT * FROM user",
-            "SELECT * FROM message",
-        ])
-        try await handle.applied()
-        // Initial-subscription rows arrive on the same TransactionUpdate
-        // path as ongoing changes; give the receive loop a moment to
-        // dispatch into the table caches.
-        try await Task.sleep(nanoseconds: 200_000_000)
+            let handle = try await client.subscribe([
+                "SELECT * FROM user",
+                "SELECT * FROM message",
+            ])
+            try await handle.applied()
+            try await Task.sleep(nanoseconds: 200_000_000)
 
-        let userCount = await users.count
-        let messageCount = await messages.count
-        #expect(userCount >= 0)
-        #expect(messageCount >= 0)
+            let userCount = await users.count
+            let messageCount = await messages.count
+            #expect(userCount >= 0)
+            #expect(messageCount >= 0)
 
-        // PK lookup should work for any cached user (we don't care which).
-        if let any = await users.iter().first {
-            let found = await users.find(any.identity)
-            #expect(found == any)
+            if let any = await users.iter().first {
+                let found = await users.find(any.identity)
+                #expect(found == any)
+            }
+
+            try await handle.unsubscribe()
         }
+    }
 
-        try await handle.unsubscribe()
+    @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
+    func phase12BuilderConnectsAndCallsReducer() async throws {
+        try await withTimeout {
+            let client = try SpacetimeDBClient.builder()
+                .withUri(Self.host)
+                .withDatabaseName(Self.db)
+                .withCompression(.brotli)
+                .build()
+
+            try await self.connectAndWait(client: client)
+            defer { Task { await client.disconnect() } }
+
+            let result = try await client.callReducer(SetNameReducer(userName: "ParityBuilder"))
+            #expect(result.returnValue.isEmpty)
+            #expect(await client.lightMode == false)
+        }
+    }
+
+    @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
+    func phase12LightModeReducerFireAndForget() async throws {
+        try await withTimeout {
+            // Light mode: callReducer returns immediately because the
+            // server suppresses the success-side TransactionUpdate echo.
+            // We just verify the call completes within budget.
+            let client = try SpacetimeDBClient.builder()
+                .withUri(Self.host)
+                .withDatabaseName(Self.db)
+                .withLightMode()
+                .build()
+
+            try await self.connectAndWait(client: client)
+            defer { Task { await client.disconnect() } }
+
+            let result = try await client.callReducer(SetNameReducer(userName: "ParityLight"))
+            #expect(result.returnValue.isEmpty)
+            #expect(await client.lightMode == true)
+        }
     }
 
     @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
     func setNameReducerRoundTrip() async throws {
-        let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
-        try await connectAndWait(client: client)
-        defer { Task { await client.disconnect() } }
+        try await withTimeout {
+            let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
+            try await self.connectAndWait(client: client)
+            defer { Task { await client.disconnect() } }
 
-        let result = try await client.callReducer(SetNameReducer(userName: "ParityTest"))
-        #expect(result.returnValue.isEmpty)        // set_name returns ()
+            let result = try await client.callReducer(SetNameReducer(userName: "ParityTest"))
+            #expect(result.returnValue.isEmpty)
+        }
     }
 }

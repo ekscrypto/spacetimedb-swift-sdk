@@ -52,12 +52,28 @@ extension SpacetimeDBClient {
     public func callReducer(name: String, encodedArguments: Data) async throws -> ReducerSuccess {
         guard let webSocketTask else { throw Errors.disconnected }
         let requestId = nextRequestId
+        let flags: CallReducerFlags = lightMode ? .noSuccessNotify : .default
         let request = CallReducerRequest(
             reducer: name,
             arguments: encodedArguments,
-            requestId: requestId
+            requestId: requestId,
+            flags: flags
         )
         let payload = try request.encode()
+
+        // Light mode: server suppresses the success-side TransactionUpdate
+        // echo, so no `pendingReducerCalls` entry would ever resolve. We
+        // fire-and-forget the call here, returning an empty success
+        // immediately. Errors are still surfaced asynchronously through
+        // the reducerEvents stream when the server reports them.
+        if flags == .noSuccessNotify {
+            try await webSocketTask.send(.data(payload))
+            return ReducerSuccess(
+                returnValue: Data(),
+                timestamp: Date(),
+                transactionUpdate: TransactionUpdate(querySets: [])
+            )
+        }
 
         return try await withCheckedThrowingContinuation { continuation in
             self.pendingReducerCalls[requestId] = PendingReducerCall(

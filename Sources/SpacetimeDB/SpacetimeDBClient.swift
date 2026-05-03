@@ -36,9 +36,11 @@ public actor SpacetimeDBClient {
         urlSession: URLSession? = nil,
         compression: Compression = .brotli,
         confirmedReads: Bool = false,
+        lightMode: Bool = false,
         debugEnabled: Bool = false
     ) throws {
         self.confirmedReads = confirmedReads
+        self.lightMode = lightMode
         let trimmed = host.hasSuffix("/") ? String(host.dropLast()) : host
         guard trimmed.hasPrefix("http://")
                 || trimmed.hasPrefix("https://")
@@ -73,6 +75,12 @@ public actor SpacetimeDBClient {
     /// instructing the server to wait for durable confirmation before returning
     /// query results. Trades latency for stronger consistency.
     internal let confirmedReads: Bool
+    /// When `true`, every `callReducer` defaults to the
+    /// `CallReducerFlags.noSuccessNotify` flag — on success the server
+    /// suppresses the `TransactionUpdate` echo back to this client,
+    /// which is how the TS v3 SDK exposes "light mode". Other clients'
+    /// subscriptions still see the diffs.
+    public let lightMode: Bool
     public let host: String
     public let dbName: String
 
