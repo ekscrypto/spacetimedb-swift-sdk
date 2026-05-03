@@ -295,7 +295,7 @@ extension SpacetimeDBClient {
         }
     }
 
-    /// Fan out a single table's diff to the legacy delegate, the per-table
+    /// Fan out a single table's diff to the delegate, the per-table
     /// stream, and the per-row stream (with PK-matched updates).
     private func emitTableUpdate(tableName: String, deletes: [Any], inserts: [Any]) async {
         let event = TableEvent(tableName: tableName, deletes: deletes, inserts: inserts)
@@ -305,7 +305,7 @@ extension SpacetimeDBClient {
 
     /// Decode a flat array of BSATN-encoded rows for the named table.
     /// If no decoder is registered, returns the raw `Data` rows so the
-    /// caller can still see the diff (legacy behaviour).
+    /// caller can still see the diff.
     private func decodeRows(_ rawRows: [Data], tableName: String) -> [Any] {
         guard !rawRows.isEmpty else { return [] }
         guard let decoder = decoder(forTable: tableName) else {

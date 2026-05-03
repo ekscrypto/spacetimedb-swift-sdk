@@ -3,7 +3,7 @@ import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-@Suite("SubscriptionHandle Tests (v2)")
+@Suite("SubscriptionHandle Tests")
 struct SubscriptionHandleTests {
 
     /// `applied()` resolves when the matching `.applied` event arrives.

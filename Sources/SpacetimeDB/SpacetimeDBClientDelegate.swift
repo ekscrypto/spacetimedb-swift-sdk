@@ -2,14 +2,13 @@
 //  SpacetimeDBClientDelegate.swift
 //  spacetimedb-swift-sdk
 //
-//  Legacy delegate-style notification surface. Kept for compatibility
-//  with applications that haven't migrated to the AsyncStream-based API
+//  Delegate-style notification surface. Application code may adopt this
+//  protocol or use the AsyncStream API on `SpacetimeDBClient`
 //  (`connectionEvents`, `reducerEvents`, `subscriptionEvents`,
-//  `tableEvents(named:)`, `rowEvents(table:)`).
+//  `tableEvents(named:)`, `rowEvents(table:)`); both fan out from the
+//  same receive loop.
 //
 //  All methods are optional via the protocol-extension defaults below.
-//  New code should prefer the streams API plus async/await on
-//  `callReducer` / `callProcedure` / `oneOffQuery`.
 //
 
 import Foundation
@@ -35,7 +34,7 @@ public protocol SpacetimeDBClientDelegate: AnyObject, Sendable {
     /// registered for the table, the arrays carry raw `Data` rows.
     func onTableUpdate(client: SpacetimeDBClient, event: TableEvent) async
 
-    /// Server response to a `callReducer`. The full v2 outcome enum is
+    /// Server response to a `callReducer`. The full outcome enum is
     /// passed; consumers can pattern-match on `.ok` / `.okEmpty` /
     /// `.error` / `.internalError`.
     func onReducerResponse(client: SpacetimeDBClient, requestId: UInt32, reducerName: String, outcome: ReducerOutcome) async

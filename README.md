@@ -108,8 +108,8 @@ The chat client supports several command line options for testing and debugging:
   - **Example**: `./.build/debug/quickstart-chat --no-subscribe`
 
 - **`--streams`** - Run the streams-only demo (no `SpacetimeDBClientDelegate`)
-  - **Use case**: See the modern AsyncStream + `SubscriptionHandle` + `Credentials` API in action.
-  - **Implementation**: `Sources/quickstart-chat/StreamsChat.swift` (~150 LOC vs the 400-LOC delegate-based `ChatClientDelegate`).
+  - **Use case**: See the AsyncStream + `SubscriptionHandle` + `Credentials` API in action.
+  - **Implementation**: `Sources/quickstart-chat/StreamsChat.swift`.
   - **Example**: `./.build/debug/quickstart-chat --streams`
 
 **Example Usage Scenarios:**
@@ -166,10 +166,9 @@ For comparison and reference, see the official SpacetimeDB quickstart tutorials:
 
 ## Usage
 
-### Modern API at a glance
+### API at a glance
 
-The SDK exposes a Swift Concurrency-first surface alongside the legacy
-delegate-based API:
+The SDK exposes a Swift Concurrency-first surface:
 
 ```swift
 // 1. Strong types
@@ -195,7 +194,7 @@ try await sub.unsubscribe()                              // or .unsubscribe(incl
 let success = try await client.callReducer(SetNameReducer(userName: "Alice"))
 print("returned \(success.returnValue.count) bytes at \(success.timestamp)")
 
-// 5. callProcedure — non-transactional read-only RPCs (new in v2)
+// 5. callProcedure — non-transactional read-only RPCs
 let payload = try await client.callProcedure(name: "lookup_user", arguments: argBytes)
 
 // 6. BSATNRow protocol — one-line table registration
@@ -229,13 +228,13 @@ import SpacetimeDBObservation
 }
 ```
 
-The legacy `SpacetimeDBClientDelegate` still works (`connect(delegate:)` is now optional), but new code should prefer the surfaces above.
+A delegate-based callback surface (`SpacetimeDBClientDelegate`) is also available; pass an instance to `connect(delegate:)` if you prefer callbacks over the streams above.
 
 ### Creating Table Row Decoders
 
-Before connecting to SpacetimeDB, you need to create decoders for your tables. The recommended path is the **`BSATNRow`** protocol shown above — one `init(reader:)` per table, automatic registration via `client.registerTableRowDecoder(MyRow.self)`. The `spacetime-swift` codegen tool emits these for you from a SpacetimeDB schema JSON.
+Before connecting to SpacetimeDB, register a decoder for each table. The **`BSATNRow`** protocol shown above — one `init(reader:)` per table, registered with `client.registerTableRowDecoder(MyRow.self)` — is the standard path. The `spacetime-swift` codegen tool emits these for you from a SpacetimeDB schema JSON.
 
-The legacy `ProductModel` + `TableRowDecoder` pattern still compiles. See **[Rust to Swift Conversion Guide](RUST_TO_SWIFT_GUIDE.md)** for the long-form walkthrough.
+Hand-written decoders that conform to `TableRowDecoder` directly (with a `ProductModel` and a `decode(modelValues:)` method) are also supported.
 
 ### Establishing a connection
 ```swift
@@ -276,7 +275,7 @@ let sub = try await client.subscribe([
 try await sub.applied()
 
 // Later, unsubscribe. Pass includeDroppedRows: true to receive the
-// removed rows in the corresponding UnsubscribeApplied (v2 SendDroppedRows flag).
+// removed rows in the corresponding UnsubscribeApplied (SendDroppedRows flag).
 try await sub.unsubscribe()
 ```
 
@@ -310,11 +309,11 @@ do {
 }
 ```
 
-### Calling procedures (v2)
+### Calling procedures
 
-Procedures are non-transactional read-only RPCs introduced in v2. Unlike
-reducers, they don't commit a transaction — the response is just a
-return value (or an error).
+Procedures are non-transactional read-only RPCs. Unlike reducers, they
+don't commit a transaction — the response is just a return value (or
+an error).
 
 ```swift
 do {
@@ -369,11 +368,10 @@ do {
 #### ❌ Not Yet Implemented
 - **Maps with non-String keys**: Currently only String keys are fully tested
 
-### SpacetimeDB Protocol Support (v2)
+### SpacetimeDB Protocol Support
 
 The SDK speaks the WebSocket subprotocol `v2.bsatn.spacetimedb`, matching
-the upstream Rust SDK's wire format. The v1 subprotocol is no longer
-supported.
+the upstream Rust SDK's wire format.
 
 #### Client → Server Messages
 
@@ -383,13 +381,13 @@ supported.
 | 0x01 | Unsubscribe   | ✅ Implemented (with `SendDroppedRows` flag) |
 | 0x02 | OneOffQuery   | ✅ Implemented |
 | 0x03 | CallReducer   | ✅ Implemented |
-| 0x04 | CallProcedure | ✅ Implemented (new in v2) |
+| 0x04 | CallProcedure | ✅ Implemented |
 
 #### Server → Client Messages
 
 | Tag  | Message            | Status |
 |------|--------------------|--------|
-| 0x00 | InitialConnection  | ✅ Implemented (replaces v1 IdentityToken + InitialSubscription) |
+| 0x00 | InitialConnection  | ✅ Implemented |
 | 0x01 | SubscribeApplied   | ✅ Implemented |
 | 0x02 | UnsubscribeApplied | ✅ Implemented |
 | 0x03 | SubscriptionError  | ✅ Implemented |
@@ -400,8 +398,8 @@ supported.
 
 ### Compression Support
 
-v2 compresses entire `ServerMessage` frames at the WebSocket level
-(per-table `CompressibleQueryUpdate` from v1 is gone).
+The protocol compresses entire `ServerMessage` frames at the WebSocket
+level.
 
 - ✅ **Uncompressed**: Full support
 - ✅ **Brotli**: Full support — default; requires iOS 15+/macOS 12+
@@ -418,9 +416,9 @@ v2 compresses entire `ServerMessage` frames at the WebSocket level
 
 ### Delegate Callbacks
 
-The legacy `SpacetimeDBClientDelegate` is still available for callers who
-prefer callbacks over the AsyncStream surface. All methods have default
-no-op implementations — override only the ones you care about.
+`SpacetimeDBClientDelegate` is available for callers who prefer callbacks
+over the AsyncStream surface. All methods have default no-op
+implementations — override only the ones you care about.
 
 | Method | Purpose |
 |--------|---------|
@@ -442,8 +440,8 @@ no-op implementations — override only the ones you care about.
 The SDK has 192 tests across 26 suites (Swift Testing framework).
 
 **✅ Covered:**
-- **v2 request encoding**: Subscribe, Unsubscribe (incl. `SendDroppedRows` flag), CallReducer, CallProcedure, OneOffQuery — exact byte-level binary verification
-- **v2 response decoding**: InitialConnection, SubscribeApplied, UnsubscribeApplied (with optional `QueryRows`), SubscriptionError, TransactionUpdate, OneOffQueryResult, ReducerResult, ProcedureResult
+- **Request encoding**: Subscribe, Unsubscribe (incl. `SendDroppedRows` flag), CallReducer, CallProcedure, OneOffQuery — exact byte-level binary verification
+- **Response decoding**: InitialConnection, SubscribeApplied, UnsubscribeApplied (with optional `QueryRows`), SubscriptionError, TransactionUpdate, OneOffQueryResult, ReducerResult, ProcedureResult
 - **Row formats**: `BsatnRowList` FixedSize and RowOffsets variants; `TableUpdateRows.persistent` and `.event` variants
 - **BSATN primitive types**: all integers (incl. UInt128/UInt256/Int128/Int256), Float32/Float64, Bool, String, arrays, products, sums
 - **Compression**: brotli round-trip, gzip round-trip via `/usr/bin/gzip` (incl. FNAME header handling)
@@ -468,26 +466,46 @@ The SDK has 192 tests across 26 suites (Swift Testing framework).
    until it ships in a release. See `Tests/maincloud-fixtures/parity-module/README.md`
    for the bring-up steps once it does.
 
-### Roadmap / TODO
+### Protocol Compatibility
 
-- [x] ~~Implement Brotli decompression~~ ✅
-- [x] ~~Implement Gzip decompression~~ ✅
-- [x] ~~Add automatic reconnection with exponential backoff~~ ✅
-- [x] ~~Add debug mode for detailed logging~~ ✅
-- [x] ~~Add connection heartbeat/keepalive~~ ✅ (native URLSession ping/pong)
-- [x] ~~Implement single + multi unsubscribe~~ ✅ (collapsed into one in v2)
-- [x] ~~Add one-off query support~~ ✅
-- [x] ~~Comprehensive unit tests for all protocol messages~~ ✅ (192 tests)
-- [x] ~~Migrate to v2 protocol (`v2.bsatn.spacetimedb`)~~ ✅
-- [x] ~~Add `callProcedure` (v2)~~ ✅
-- [x] ~~Typed `Procedure` protocol mirroring `Reducer`~~ ✅
-- [x] ~~Typed query DSL (mirrors Rust `crates/query-builder`)~~ ✅
-- [x] ~~`ClientMetrics` (mirrors Rust `unstable::CLIENT_METRICS`)~~ ✅
-- [x] ~~`BSATNEventRow` marker + typed `eventRows` stream~~ ✅ (live test pending upstream release)
-- [ ] **Re-add `telemetry_event` to parity-module + flip on the live `BSATNEventRow` smoke test once spacetimedb crate exposes the `event` flag** (master-only as of 1.12 — search this repo for `EVENT-FLAG-WAITING-ON-RELEASE`)
-- [ ] Performance optimizations for large datasets
-- [ ] More SwiftUI property wrappers for reactive updates
-- [ ] End-to-end integration tests against a local SpacetimeDB instance
+The Swift SDK speaks the **`v2.bsatn.spacetimedb`** subprotocol — the
+current stable wire format used by the upstream Rust SDK. The matrix
+below describes what each SpacetimeDB WebSocket subprotocol offers,
+sourced from `crates/client-api-messages/src/websocket/{v1,v2,v3}.rs`
+and the reference Rust / TypeScript clients.
+
+#### Subprotocol identifiers
+
+| Identifier | Server | Used by upstream SDKs |
+|------------|--------|----------------------|
+| `v1.bsatn.spacetimedb` (and `v1.json.spacetimedb`) | Accepted (compat) | None — pre-1.0 only |
+| `v2.bsatn.spacetimedb` | Accepted | Rust SDK, TS SDK, **Swift SDK** |
+| `v3.bsatn.spacetimedb` | Preferred (offered first) | TS SDK (preferred); not Rust |
+
+#### Feature matrix
+
+| Feature | v1 | v2 | v3 |
+|---------|----|----|----|
+| Subscription model | Three message types (set-replace `Subscribe`, `SubscribeSingle`, `SubscribeMulti`) | Unified `Subscribe`/`Unsubscribe` keyed by `QuerySetId` | same as v2 |
+| `SendDroppedRows` flag on Unsubscribe | ❌ (rows always returned) | ✅ | ✅ |
+| `OneOffQuery` | ✅ (16-byte `messageId`) | ✅ (u32 `requestId`) | ✅ |
+| `CallReducer` | ✅ — flags `Default` / `FullUpdate` / `NoSuccessNotify` | ✅ — `Default` only (`NoSuccessNotify` dropped) | ✅ |
+| `CallProcedure` (read-only RPCs) | ❌ | ✅ | ✅ |
+| Connection token message | `IdentityToken` | Renamed `InitialConnection` | same as v2 |
+| Initial subscription delivery | Separate `InitialSubscription` server msg | Folded into `SubscribeApplied.rows: QueryRows` | same as v2 |
+| Reducer result delivery | Bundled in caller's `TransactionUpdate` | Split into `ReducerResult { ReducerOutcome }` with nested `TransactionUpdate`; broadcast `TransactionUpdate` is delta-only | same as v2 |
+| `TransactionUpdate` envelope | Per-reducer (status, timestamp, caller, energy, host duration, `DatabaseUpdate`) | Pure delta `[QuerySetUpdate]` keyed by `QuerySetId` | same as v2 |
+| `TableUpdate` shape | `{ table_id, table_name, num_rows, [QueryUpdate] }` | `{ table_name, [TableUpdateRows] }` (`table_id`/`num_rows` removed) | same as v2 |
+| Event tables (`#[spacetimedb::table(... event)]`) | ❌ | ✅ via `TableUpdateRows::EventTable` | ✅ |
+| Per-table compression (`CompressableQueryUpdate`) | ✅ (Uncompressed / Brotli / Gzip wrap each `QueryUpdate`) | ❌ — message-level only | ❌ |
+| Whole-message compression tags | ✅ | ✅ | ✅ |
+| Energy / host duration reporting | On every `TransactionUpdate` | Only on `ReducerResult` / `ProcedureResult` | same as v2 |
+| Multiple BSATN messages per WS frame | ❌ — one message per frame | ❌ — one message per frame | ✅ — a single binary payload may concatenate several `ClientMessage` / `ServerMessage` values |
+| JSON wire variant | ✅ (`v1.json.spacetimedb`) | ❌ — BSATN only | ❌ — BSATN only |
+
+#### v2 → v3 in one line
+
+v3's schema is byte-identical to v2 (`v3.rs` re-exports `v2::ClientMessage` / `v2::ServerMessage`); the only change is a framing optimization that lets a single WebSocket binary frame carry several coalesced messages. v3 adoption only requires teaching the receive loop to loop-decode the payload — no new request or response types.
 
 ## Lessons learned
 

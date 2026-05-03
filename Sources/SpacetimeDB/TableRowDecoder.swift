@@ -14,8 +14,8 @@ public protocol TableRowDecoder: Sendable {
 
   /// Reader-based fast path used by `BSATNRow`-style decoders. Default
   /// implementation reads an `AlgebraicValue` first and dispatches via
-  /// `decode(modelValues:)` — preserving existing behavior for legacy
-  /// hand-rolled decoders. New row types can override this directly.
+  /// `decode(modelValues:)`; row types may override this directly to
+  /// skip the AlgebraicValue intermediate.
   func decode(reader: BSATNReader) throws -> Any
 
   /// Optional primary-key extractor used by `client.rowEvents(table:)`

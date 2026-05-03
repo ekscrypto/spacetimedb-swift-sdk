@@ -11,10 +11,9 @@
 //    2 -> Err(bytes)        — BSATN-encoded value of the reducer's error type
 //    3 -> InternalError(s)  — host panic or unexpected failure
 //
-//  v1 collapsed self- and other-caused transactions into a single
-//  TransactionUpdate; v2 routes the self-caused ones through here so the
-//  caller can correlate via request_id and receive the reducer's return
-//  value (which v1 had no path for).
+//  Self-caused transactions are routed through here so the caller can
+//  correlate via request_id and receive the reducer's return value.
+//  Other-caused transactions arrive on `TransactionUpdate` instead.
 //
 
 import Foundation

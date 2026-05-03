@@ -10,10 +10,10 @@ import Foundation
 extension SpacetimeDBClient {
     /// Connect to the server.
     ///
-    /// `delegate` is optional now: applications using only the AsyncStream
+    /// `delegate` is optional: applications using only the AsyncStream
     /// surface (`client.connectionEvents` / `.reducerEvents` / `.tableEvents`
-    /// / `.rowEvents`) and `SubscriptionHandle` should pass `nil`. The
-    /// legacy `SpacetimeDBClientDelegate` still works for backward compat.
+    /// / `.rowEvents`) and `SubscriptionHandle` should pass `nil`. Pass an
+    /// instance of `SpacetimeDBClientDelegate` to receive callbacks instead.
     public func connect(
         token: AuthenticationToken? = nil,
         timeout: TimeInterval = 10.0,

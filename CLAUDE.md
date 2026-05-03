@@ -26,8 +26,8 @@ This document focuses on **implementation details** not covered in the README.
    - Client → Server and Server → Client message types are defined in `Sources/SpacetimeDB/Tags.swift`
 
 3. **Table Row Decoders**: Tables require registered decoders before data can be received
-   - **Recommended**: adopt the `BSATNRow` protocol on the row struct (just `init(reader:)` + `static var tableName`); register with `client.registerTableRowDecoder(MyRow.self)`. For tables with a primary key, adopt `BSATNTableWithPrimaryKey` instead — that unlocks `.updated(old:new:)` events on the per-row stream.
-   - **Legacy**: implement `TableRowDecoder` directly with a `ProductModel` and a `decode(modelValues:)` method. Still supported via a default `decode(reader:)` extension that reads the AlgebraicValue first.
+   - Adopt the `BSATNRow` protocol on the row struct (just `init(reader:)` + `static var tableName`); register with `client.registerTableRowDecoder(MyRow.self)`. For tables with a primary key, adopt `BSATNTableWithPrimaryKey` instead — that unlocks `.updated(old:new:)` events on the per-row stream.
+   - Hand-written decoders may conform to `TableRowDecoder` directly with a `ProductModel` and a `decode(modelValues:)` method. The default `decode(reader:)` extension reads the AlgebraicValue first and dispatches.
    - The codegen tool `spacetime-swift generate` emits `BSATNRow`/`BSATNTableWithPrimaryKey`-based files automatically.
 
 4. **Reducers**: Server-side functions that modify database state
@@ -36,23 +36,23 @@ This document focuses on **implementation details** not covered in the README.
    - Codegen also emits per-reducer `<Name>Reducer` structs.
 
 5. **Subscription Management**: Clients can subscribe and unsubscribe from data changes
-   - **Recommended**: `let handle = try await client.subscribe([...])` returns a `SubscriptionHandle`; await `handle.applied()` and later `handle.unsubscribe()`. Use `client.subscribeToAllTables()` to subscribe to every registered table.
-   - **Legacy**: `subscribeMulti(queries:queryId:)` / `subscribe(queries:requestId:)` / `unsubscribe(queryId:)` / `unsubscribeSingle(queryId:)` still work as wire-level primitives.
+   - `let handle = try await client.subscribe([...])` returns a `SubscriptionHandle`; await `handle.applied()` and later `handle.unsubscribe()`. Use `client.subscribeToAllTables()` to subscribe to every registered table.
+   - Wire-level primitives `subscribeMulti(queries:queryId:)` / `subscribe(queries:requestId:)` / `unsubscribe(queryId:)` / `unsubscribeSingle(queryId:)` are also exposed for callers that need to manage query IDs themselves.
 
-6. **Event surface**: prefer AsyncStreams over the delegate.
+6. **Event surface**: AsyncStreams or `SpacetimeDBClientDelegate` callbacks — both fan out from the same receive loop.
    - `client.connectionEvents` — `.connected/.reconnecting/.disconnected/.error`
    - `client.reducerEvents` — typed `ReducerStatus` + `EnergyQuanta`
    - `client.subscriptionEvents` — `.applied/.unsubscribed/.error`
    - `client.tableEvents(named:)` — batched per-table updates
    - `client.rowEvents(table:)` — per-row events; PK-matched delete+insert pairs collapse to `.updated(old:new:)` automatically
-   - `SpacetimeDBClientDelegate` still works (`connect(delegate:)` is now optional) but is legacy.
+   - `connect(delegate:)` is optional — pass `nil` to use only the streams.
 
 ### Architecture Decisions
 
 - **No SDK-level interpretation**: The SDK passes data to the delegate without interpreting changes — rename detection is done by the client. The streams API does it for free via PK matching when the row adopts `BSATNTableWithPrimaryKey`.
 - **Batched updates**: All table updates for a transaction are batched before notifying delegate AND before fanning out to the per-table stream.
 - **Offsets in BsatnRowList**: Offsets mark the START position of rows in the data blob, not the end
-- **Subscription readiness**: Wait for `SubscriptionHandle.applied()` (or the legacy `onSubscribeMultiApplied` delegate call) before processing user commands. **Streams-mode trap**: subscribing before the server's `IdentityToken` arrives hangs against maincloud — always wait for `ConnectionEvent.connected` before calling `subscribe(...)`. See `Sources/quickstart-chat/StreamsChat.swift` for the canonical pattern.
+- **Subscription readiness**: Wait for `SubscriptionHandle.applied()` (or the `onSubscribeMultiApplied` delegate call) before processing user commands. **Streams-mode trap**: subscribing before the server's `IdentityToken` arrives hangs against maincloud — always wait for `ConnectionEvent.connected` before calling `subscribe(...)`. See `Sources/quickstart-chat/StreamsChat.swift` for the canonical pattern.
 
 ### Testing Commands
 When implementing new features, test with the quickstart-chat application:
@@ -96,8 +96,6 @@ let client = try SpacetimeDBClient(
 - `.gzip` (rawValue: 2) - Full RFC 1952 support (framing stripped, raw DEFLATE payload run through Apple's `COMPRESSION_ZLIB`)
 
 The SDK automatically handles both protocol-level compression (entire messages) and data-level compression (query updates within messages). The Compression enum provides `serverString` for WebSocket negotiation and raw values for protocol messages.
-
-**Note:** The two previously duplicate Compression enums have been merged into a single public enum in the BSATN module.
 
 ### Priority Roadmap Items
 

@@ -2,12 +2,8 @@
 //  StreamsChat.swift
 //  quickstart-chat
 //
-//  Streams-only demonstration of the SDK's modern surface —
-//  no `SpacetimeDBClientDelegate`, just AsyncStreams + SubscriptionHandle
-//  + Credentials.
-//
-//  Compare with ChatClientDelegate.swift (~400 LOC) to see what the
-//  delegate-based path costs vs. the stream-based path.
+//  Streams-only demonstration — no `SpacetimeDBClientDelegate`,
+//  just AsyncStreams + SubscriptionHandle + Credentials.
 //
 //  Wire it up via `quickstart-chat --streams`.
 //

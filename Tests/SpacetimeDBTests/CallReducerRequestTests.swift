@@ -3,11 +3,11 @@ import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-@Suite("CallReducer Request Tests (v2)")
+@Suite("CallReducer Request Tests")
 struct CallReducerRequestTests {
 
     @Test func encodesCallReducerRequestCorrectly() throws {
-        // v2 wire: tag (0x03) + request_id (u32) + flags (u8) + reducer (string) + args (bytes).
+        // Wire: tag (0x03) + request_id (u32) + flags (u8) + reducer (string) + args (bytes).
         let request = CallReducerRequest(
             reducer: "send_message",
             arguments: Data([0x01, 0x02, 0x03, 0x04]),

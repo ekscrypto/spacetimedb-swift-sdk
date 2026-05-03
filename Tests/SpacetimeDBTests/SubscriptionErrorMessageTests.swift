@@ -3,12 +3,11 @@ import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-@Suite("SubscriptionError Message Tests (v2)")
+@Suite("SubscriptionError Message Tests")
 struct SubscriptionErrorMessageTests {
 
-    /// v2 wire shape: request_id (Option<u32>) + query_set_id (u32) + error (string).
-    /// v1 also carried a u64 hostExec, an Option<query_id>, an Option<table_id>;
-    /// v2 drops both of those (errors are scoped by query_set_id only).
+    /// Wire shape: request_id (Option<u32>) + query_set_id (u32) + error (string).
+    /// Errors are scoped by query_set_id only.
 
     @Test func decodesWithRequestIdPresent() throws {
         // Response to a client-issued Subscribe.

@@ -3,12 +3,11 @@ import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-@Suite("OneOffQuery Request Tests (v2)")
+@Suite("OneOffQuery Request Tests")
 struct OneOffQueryRequestTests {
 
     @Test func encodesOneOffQueryRequestCorrectly() throws {
-        // v2 wire: tag (0x02) + request_id (u32) + query_string (string).
-        // v1 carried a 16-byte messageId blob; v2 collapses to a request_id.
+        // Wire: tag (0x02) + request_id (u32) + query_string (string).
         let request = OneOffQueryRequest(
             requestId: 42,
             queryString: "SELECT * FROM user WHERE id = 42"

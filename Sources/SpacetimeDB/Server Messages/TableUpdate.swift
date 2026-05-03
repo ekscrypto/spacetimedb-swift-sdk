@@ -9,9 +9,8 @@
 //                      0 -> PersistentTable { inserts, deletes }
 //                      1 -> EventTable      { events }
 //
-//  Note: in v1 each TableUpdate carried (table_id, table_name, num_rows,
-//  [CompressibleQueryUpdate]). v2 drops table_id and num_rows; per-table
-//  compression is also gone (only message-level compression remains).
+//  Compression is applied at the message level only — there is no
+//  per-table CompressibleQueryUpdate.
 //
 
 import Foundation
@@ -61,7 +60,7 @@ public enum TableUpdateRows: Sendable {
         let tag: UInt8 = try reader.read()
         switch tag {
         case 0:
-            // Note v2 field order: inserts FIRST, then deletes (swapped from v1).
+            // Wire field order: inserts FIRST, then deletes.
             let inserts = try BsatnRowList(reader: reader)
             let deletes = try BsatnRowList(reader: reader)
             self = .persistent(inserts: inserts, deletes: deletes)

@@ -3,11 +3,11 @@ import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-@Suite("Unsubscribe Request Tests (v2)")
+@Suite("Unsubscribe Request Tests")
 struct UnsubscribeRequestTests {
 
     @Test func encodesUnsubscribeRequestCorrectly() throws {
-        // v2 wire: tag (0x01) + request_id (u32) + query_set_id (u32) + flags (u8)
+        // Wire: tag (0x01) + request_id (u32) + query_set_id (u32) + flags (u8)
         let request = UnsubscribeRequest(
             requestId: 987_654_321,
             querySetId: QuerySetId(123),

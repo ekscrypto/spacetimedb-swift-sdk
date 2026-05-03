@@ -3,10 +3,10 @@ import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-@Suite("UnsubscribeApplied Response Tests (v2)")
+@Suite("UnsubscribeApplied Response Tests")
 struct UnsubscribeAppliedResponseTests {
 
-    /// v2 wire shape: request_id (u32) + query_set_id (u32) + rows: Option<QueryRows>.
+    /// Wire shape: request_id (u32) + query_set_id (u32) + rows: Option<QueryRows>.
     /// Option tag 0 = Some(QueryRows), tag 1 = None.
 
     private static func writeEmptyRowList(_ writer: BSATNWriter) {

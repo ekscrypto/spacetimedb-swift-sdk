@@ -74,19 +74,19 @@ struct BSATNRowTests {
         #expect(none == OptionalRow(id: id, name: nil, online: false))
     }
 
-    @Test func legacyDecoderStillWorksViaDefaultExtension() throws {
-        // A hand-rolled (legacy) decoder that only implements
-        // `decode(modelValues:)` should still get the reader path via
-        // the default extension on `TableRowDecoder`.
-        struct LegacyModel: ProductModel {
+    @Test func tableRowDecoderViaDefaultDecodeReaderExtension() throws {
+        // A hand-rolled decoder that only implements `decode(modelValues:)`
+        // should still receive the reader path via the default extension
+        // on `TableRowDecoder`.
+        struct HandRolledModel: ProductModel {
             var definition: [AlgebraicValueType] { [.uint32, .bool] }
         }
-        struct LegacyDecoder: TableRowDecoder {
-            var model: ProductModel { LegacyModel() }
+        struct HandRolledDecoder: TableRowDecoder {
+            var model: ProductModel { HandRolledModel() }
             func decode(modelValues: [AlgebraicValue]) throws -> Any {
                 guard case .uint32(let a) = modelValues[0],
                       case .bool(let b) = modelValues[1] else {
-                    throw BSATNError.invalidStructure("Legacy")
+                    throw BSATNError.invalidStructure("HandRolled")
                 }
                 return [a, b] as [Any]
             }
@@ -97,7 +97,7 @@ struct BSATNRowTests {
         writer.write(false)
         let reader = BSATNReader(data: writer.finalize())
 
-        let any = try LegacyDecoder().decode(reader: reader)
+        let any = try HandRolledDecoder().decode(reader: reader)
         let arr = try #require(any as? [Any])
         #expect((arr[0] as? UInt32) == 7)
         #expect((arr[1] as? Bool) == false)

@@ -120,7 +120,7 @@ struct QuickstartChat {
             await delegate.waitForConnection()
 
             // Execute one-off query to get all users with longer timeout.
-            // v2 returns rows directly; failures throw OneOffQueryError.
+            // Rows are returned directly; failures throw OneOffQueryError.
             print("📤 Sending OneOffQuery...")
             let rows: [SingleTableRows]
             do {
@@ -387,7 +387,7 @@ struct QuickstartChat {
             let chat = try StreamsChat(host: config.host, db: config.db, credentialsURL: credsURL)
             try await chat.run(token: token)
 
-            // REPL — same shape as the legacy path, smaller surface.
+            // REPL.
             while true {
                 guard let raw = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
                     try? await Task.sleep(nanoseconds: 10_000_000)

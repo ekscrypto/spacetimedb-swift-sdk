@@ -77,8 +77,8 @@ public struct GenericTableRowDecoder<R: BSATNRow>: TableRowDecoder {
         self.primaryKeyExtractor = primaryKeyExtractor
     }
 
-    /// `model` is only consulted by the legacy (modelValues-based) path
-    /// in `TableRowDecoder`'s default extension. `BSATNRow` types skip
+    /// `model` is only consulted by the modelValues-based path in
+    /// `TableRowDecoder`'s default extension. `BSATNRow` types skip
     /// that path entirely; this stub is never read in practice.
     public var model: ProductModel { _UnusedProductModel() }
 

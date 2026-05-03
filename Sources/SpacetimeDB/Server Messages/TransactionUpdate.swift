@@ -7,9 +7,9 @@
 //
 //  Sent for transactions that affect this client's subscribed query sets
 //  but were NOT initiated by this client. (Self-caused transactions arrive
-//  via ReducerResult, which embeds its own TransactionUpdate.) v2 carries
-//  no reducer metadata in this message — that information is intentionally
-//  omitted because it is not relevant to other clients.
+//  via ReducerResult, which embeds its own TransactionUpdate.) The message
+//  carries no reducer metadata — that information is intentionally omitted
+//  because it is not relevant to other clients.
 //
 
 import Foundation

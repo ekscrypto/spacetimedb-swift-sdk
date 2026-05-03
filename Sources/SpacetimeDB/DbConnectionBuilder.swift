@@ -12,9 +12,8 @@
 //          .withLightMode()
 //          .build()
 //
-//  The original `SpacetimeDBClient.init(host:db:…)` is unchanged for
-//  backward compat. Both forms produce the same actor; the builder is
-//  pure ergonomics.
+//  `SpacetimeDBClient.init(host:db:…)` and the builder produce the
+//  same actor; the builder is pure ergonomics.
 //
 
 import Foundation

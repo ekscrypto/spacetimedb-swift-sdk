@@ -190,7 +190,7 @@ public class BSATNReader {
                     // Assume None-like variant with no value
                     return .sum(tag: tag, value: nil)
                 } else {
-                    // Try to read as string (current heuristic for backwards compatibility)
+                    // Fallback heuristic: try to read the payload as a string.
                     do {
                         let stringValue = try readAlgebraicValue(as: .string)
                         return .sum(tag: tag, value: stringValue)

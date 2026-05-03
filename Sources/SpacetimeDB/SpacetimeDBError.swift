@@ -6,14 +6,9 @@
 import Foundation
 import BSATN
 
-/// Unified, `Sendable` error type for the Swift SDK. Future-canonical home for
-/// every error the SDK can throw: connection lifecycle, protocol/encoding,
-/// reducer lifecycle, subscription lifecycle.
-///
-/// During the transition the legacy `SpacetimeDBErrors` (plural),
-/// `SpacetimeDBClient.Errors`, and `BSATNError` continue to be thrown from
-/// existing call sites. New code should throw `SpacetimeDBError` directly;
-/// the legacy types will be removed in a future major version.
+/// Unified, `Sendable` error type for the Swift SDK. Covers connection
+/// lifecycle, protocol/encoding, reducer lifecycle, and subscription
+/// lifecycle errors.
 public enum SpacetimeDBError: Error, Sendable, Equatable {
 
     // MARK: Connection lifecycle
@@ -36,16 +31,16 @@ public enum SpacetimeDBError: Error, Sendable, Equatable {
 }
 
 public extension SpacetimeDBError {
-    /// Bridge a legacy `SpacetimeDBErrors` value into the unified type.
-    init(_ legacy: SpacetimeDBErrors) {
-        switch legacy {
+    /// Wrap a `SpacetimeDBErrors` value into the unified type.
+    init(_ source: SpacetimeDBErrors) {
+        switch source {
         case .invalidDefinition(let model): self = .invalidDefinition(String(describing: model))
         case .notConnected: self = .notConnected
         case .timeout: self = .timeout
         }
     }
 
-    /// Bridge a legacy `BSATNError` value into the unified type.
+    /// Wrap a `BSATNError` value into the unified type.
     init(_ bsatn: BSATNError) {
         self = .bsatn(bsatn)
     }

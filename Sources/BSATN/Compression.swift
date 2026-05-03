@@ -10,9 +10,6 @@ public enum Compression: UInt8, CaseIterable, Sendable {
     case brotli = 1
     case gzip = 2
 
-    // Legacy names for compatibility
-    public static var uncompressed: Compression { .none }
-
     // String representation for server communication
     public var serverString: String {
         switch self {

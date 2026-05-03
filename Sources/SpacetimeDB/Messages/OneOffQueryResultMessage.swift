@@ -6,11 +6,6 @@
 //  Wire: request_id (u32) + result: Result<QueryRows, string>
 //        (BSATN sum tag: 0 = Ok(QueryRows), 1 = Err(string)).
 //
-//  Replaces v1's OneOffQueryResponse, which carried a 16-byte messageId
-//  and a separate Option<String> error field; v2 collapses these into a
-//  u32 request_id (matching the rest of the request envelope) and a
-//  Result<rows, error> sum.
-//
 
 import Foundation
 import BSATN

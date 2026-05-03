@@ -2,11 +2,8 @@
 //  ChatClientDelegate.swift
 //  spacetimedb-swift-sdk
 //
-//  Legacy-delegate path of the quickstart-chat demo. v2 collapses the
-//  v1 single/multi subscription split, so this file is significantly
-//  smaller than its v1 ancestor — there's only one Subscribe protocol
-//  to track now. New code should prefer the streams path
-//  (`StreamsChat.swift` reachable via `quickstart-chat --streams`).
+//  Delegate-based path of the quickstart-chat demo. The streams-based
+//  path lives in `StreamsChat.swift` (run via `quickstart-chat --streams`).
 //
 
 import Foundation

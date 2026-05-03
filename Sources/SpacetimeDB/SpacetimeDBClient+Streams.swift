@@ -3,7 +3,7 @@
 //  spacetimedb-swift-sdk
 //
 //  AsyncStream event surface. The streams API runs in parallel
-//  with the legacy `SpacetimeDBClientDelegate` — both fire from the same
+//  with `SpacetimeDBClientDelegate` — both fire from the same
 //  receive loop, so application code may pick either or both.
 //
 //  Multi-subscriber model: each accessor returns a fresh `AsyncStream`

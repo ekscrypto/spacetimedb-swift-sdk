@@ -22,8 +22,8 @@ public enum ConnectionEvent: Sendable {
 /// Reducer-completion event delivered on `SpacetimeDBClient.reducerEvents`.
 /// Fires once per `ReducerResult` (i.e. per self-issued `callReducer` that
 /// the server has responded to). Other clients' reducer activity is not
-/// echoed in v2; the row diffs from external transactions arrive on the
-/// per-table streams without reducer metadata.
+/// echoed by the server; the row diffs from external transactions arrive
+/// on the per-table streams without reducer metadata.
 public struct ReducerEvent: Sendable {
     public let requestId: UInt32
     public let reducerName: String
@@ -76,8 +76,8 @@ public enum SubscriptionLifecycleEvent: Sendable, Equatable {
 /// to this stream when you specifically want to distinguish foreign
 /// transactions from your own (`reducerEvents`) reducer calls.
 ///
-/// v2 carries no reducer metadata in `TransactionUpdate` — the timestamp
-/// here is locally observed when the message was decoded.
+/// `TransactionUpdate` carries no reducer metadata — the timestamp here
+/// is locally observed when the message was decoded.
 public struct TransactionEvent: Sendable {
     public let timestamp: Date
     /// Number of affected query sets in the transaction (≥1).

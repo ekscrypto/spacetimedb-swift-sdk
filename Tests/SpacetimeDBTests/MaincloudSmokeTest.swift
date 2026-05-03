@@ -24,8 +24,8 @@ struct MaincloudSmokeTest {
         let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
         let connected = await client.connectionEvents
 
-        // Connect with a no-op delegate (delegate is still accepted by the
-        // current connect() signature for legacy callers).
+        // Connect with a no-op delegate to exercise the delegate path
+        // alongside the AsyncStream surface.
         actor NoopDelegate: SpacetimeDBClientDelegate {
             nonisolated func onConnect(client: SpacetimeDBClient) async {}
             nonisolated func onError(client: SpacetimeDBClient, error: any Error) async {}

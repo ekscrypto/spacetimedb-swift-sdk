@@ -3,10 +3,10 @@ import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-@Suite("SubscribeApplied Response Tests (v2)")
+@Suite("SubscribeApplied Response Tests")
 struct SubscribeAppliedResponseTests {
 
-    /// v2 wire shape: request_id (u32) + query_set_id (u32) + rows: QueryRows.
+    /// Wire shape: request_id (u32) + query_set_id (u32) + rows: QueryRows.
     /// QueryRows = u32 table_count + [SingleTableRows]
     /// SingleTableRows = string table_name + BsatnRowList
     /// BsatnRowList = u8 size_hint + (FixedSize(u16) | RowOffsets(u32 count + count*u64)) + u32 size + bytes

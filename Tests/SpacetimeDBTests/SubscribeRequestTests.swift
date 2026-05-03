@@ -3,11 +3,11 @@ import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-@Suite("Subscribe Request Tests (v2)")
+@Suite("Subscribe Request Tests")
 struct SubscribeRequestTests {
 
     @Test func encodesSubscribeRequestCorrectly() throws {
-        // v2 wire: tag (0x00) + request_id (u32) + query_set_id (u32) + query_strings ([]string)
+        // Wire: tag (0x00) + request_id (u32) + query_set_id (u32) + query_strings ([]string)
         let request = SubscribeRequest(
             requestId: 123_456_789,
             querySetId: QuerySetId(7),

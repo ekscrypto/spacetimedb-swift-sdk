@@ -3,14 +3,15 @@ import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-@Suite("TransactionUpdate Tests (v2)")
+@Suite("TransactionUpdate Tests")
 struct TransactionUpdateTests {
 
-    /// v2 TransactionUpdate is just a list of QuerySetUpdates with row diffs.
-    /// All v1 metadata (status, timestamp, callerIdentity, callerConnectionId,
-    /// reducerCall, energyQuanta, executionDuration) is gone — that information
-    /// rides with ReducerResult instead. v2 TransactionUpdate is sent only for
-    /// transactions that did NOT originate from this client.
+    /// TransactionUpdate is a list of QuerySetUpdates with row diffs. It
+    /// carries no reducer metadata (status, timestamp, callerIdentity,
+    /// callerConnectionId, reducerCall, energyQuanta, executionDuration);
+    /// that information rides with ReducerResult instead.
+    /// TransactionUpdate is sent only for transactions that did NOT
+    /// originate from this client.
     ///
     /// QuerySetUpdate = query_set_id (u32) + tables ([TableUpdate])
     /// TableUpdate    = table_name (string) + rows ([TableUpdateRows])
@@ -44,7 +45,7 @@ struct TransactionUpdateTests {
 
         writer.write(UInt32(1))         // 1 row-set variant
         writer.write(UInt8(0))          // PersistentTable
-        Self.writeEmptyRowList(writer)  // inserts (FIRST in v2)
+        Self.writeEmptyRowList(writer)  // inserts (precede deletes on the wire)
         Self.writeEmptyRowList(writer)  // deletes
 
         let reader = BSATNReader(data: writer.finalize())

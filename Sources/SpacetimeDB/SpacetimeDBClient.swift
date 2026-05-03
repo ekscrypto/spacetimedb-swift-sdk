@@ -159,7 +159,7 @@ public actor SpacetimeDBClient {
     internal var pendingOneOffQueries: [UInt32: CheckedContinuation<OneOffQueryResultMessage, Error>] = [:]
 
     // Pending callReducer continuations, keyed by request_id. Reducers are
-    // correlated by name (server doesn't echo the name in v2's ReducerResult),
+    // correlated by name (the server does not echo the name in `ReducerResult`),
     // so we stash the name here to enrich `ReducerEvent`s.
     internal var pendingReducerCalls: [UInt32: PendingReducerCall] = [:]
     // Pending callProcedure continuations, keyed by request_id.
