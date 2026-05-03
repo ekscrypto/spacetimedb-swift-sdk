@@ -76,8 +76,8 @@ extension SpacetimeDBClient {
                 debugLog(">>> Decompressing Brotli message: \(compressedData.count) bytes")
                 decompressedData = decompressBrotli(data: compressedData)
             } else if compressionTag == BSATN.Compression.gzip.rawValue {
-                debugLog(">>> Gzip compression is not currently supported")
-                return
+                debugLog(">>> Decompressing gzip message: \(compressedData.count) bytes")
+                decompressedData = try? CompressibleQueryUpdate.decompressGzip(data: compressedData)
             }
 
             guard let decompressed = decompressedData else {

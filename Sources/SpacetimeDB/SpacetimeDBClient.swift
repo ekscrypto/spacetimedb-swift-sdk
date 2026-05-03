@@ -35,13 +35,10 @@ public actor SpacetimeDBClient {
         db dbName: String,
         urlSession: URLSession? = nil,
         compression: Compression = .brotli,
+        confirmedReads: Bool = false,
         debugEnabled: Bool = false
     ) throws {
-        // Check for unsupported compression
-        if compression == .gzip {
-            throw Errors.unsupportedCompression("Gzip compression is not currently supported")
-        }
-
+        self.confirmedReads = confirmedReads
         let trimmed = host.hasSuffix("/") ? String(host.dropLast()) : host
         guard trimmed.hasPrefix("http://")
                 || trimmed.hasPrefix("https://")
@@ -72,6 +69,10 @@ public actor SpacetimeDBClient {
     internal var socketDelegate: WebsocketDelegate?
     internal let urlSession: URLSession
     internal let compression: Compression
+    /// When `true`, the WebSocket subscribe URL gets `with_confirmed_reads=true`,
+    /// instructing the server to wait for durable confirmation before returning
+    /// query results. Trades latency for stronger consistency.
+    internal let confirmedReads: Bool
     public let host: String
     public let dbName: String
 
@@ -165,6 +166,12 @@ public actor SpacetimeDBClient {
 
     public func decoder(forTable name: String) -> TableRowDecoder? {
         return tableRowDecoders[name]
+    }
+
+    /// Names of every table for which a row decoder is currently
+    /// registered. Used by `subscribeToAllTables()`.
+    public func registeredTableNames() -> [String] {
+        Array(tableRowDecoders.keys)
     }
 
     // MARK: - Reconnection Logic

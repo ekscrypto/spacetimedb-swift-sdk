@@ -29,19 +29,9 @@ extension SpacetimeDBClient {
             self.reconnectAttempts = 0
         }
 
-        // Validate compression support before attempting connection
-        switch compression {
-        case .none:
-            // Always supported
-            break
-        case .gzip:
-            // Gzip is not currently supported
-            throw Errors.unsupportedCompression("Gzip compression is not currently supported")
-        case .brotli:
-            // Brotli requires iOS 15+/macOS 12+ via Compression framework
-            // Our minimum targets support this
-            break
-        }
+        // All compression formats (none / brotli / gzip) are now supported
+        // via the Compression framework on iOS 15+/macOS 12+ — see
+        // CompressibleQueryUpdate.decompressGzip / decompressBrotli.
 
         guard let socketDelegate = urlSession.delegate as? WebsocketDelegate else {
             throw Errors.incompatibleUrlSessionDelegate
@@ -50,7 +40,11 @@ extension SpacetimeDBClient {
         self.clientDelegate = clientDelegate
         self.socketDelegate = socketDelegate
 
-        guard let v1Url = URL(string: "\(wsHost)/v1/database/\(dbName)/subscribe?compression=\(compression.serverString)") else {
+        var urlString = "\(wsHost)/v1/database/\(dbName)/subscribe?compression=\(compression.serverString)"
+        if confirmedReads {
+            urlString += "&with_confirmed_reads=true"
+        }
+        guard let v1Url = URL(string: urlString) else {
             throw Errors.invalidServerAddress
         }
         var request = URLRequest(

@@ -32,6 +32,25 @@ extension SpacetimeDBClient {
         return SubscriptionHandle(queryId: queryId, isMulti: false, queries: queries, client: self)
     }
 
+    /// Convenience: emit `SELECT * FROM <table>` for every currently-
+    /// registered table-row decoder and subscribe to the lot via
+    /// `SubscribeMulti`. Returns a single `SubscriptionHandle`.
+    ///
+    /// Throws if no decoders are registered yet — register your row
+    /// types first (or use `subscribe([...])` directly with explicit
+    /// queries).
+    @discardableResult
+    public func subscribeToAllTables() async throws -> SubscriptionHandle {
+        let tables = registeredTableNames()
+        guard !tables.isEmpty else {
+            throw SpacetimeDBError.invalidDefinition(
+                "subscribeToAllTables called before any table decoder was registered"
+            )
+        }
+        let queries = tables.sorted().map { "SELECT * FROM \($0)" }
+        return try await subscribe(queries)
+    }
+
     // MARK: Pending-event registries
 
     internal func awaitSubscriptionApplied(queryId: UInt32, multi: Bool) async throws {

@@ -108,15 +108,13 @@ struct CompressibleQueryUpdateTests {
         #expect(result.deletes.rows[0] == deleteRows[0])
     }
 
-    @Test("Handle unsupported GZIP compression")
-    func unsupportedGzipCompression() throws {
+    @Test("Reject malformed GZIP payload")
+    func malformedGzipCompression() throws {
+        // Phase 9 added gzip support — bogus bytes should still fail
+        // cleanly rather than crashing.
         let compressible = CompressibleQueryUpdate.gzip(Data(repeating: 0, count: 10))
-
-        #expect {
-            try compressible.getQueryUpdate()
-        } throws: { error in
-            guard case BSATNError.invalidStructure(let message) = error else { return false }
-            return message == "Gzip compression is not currently supported"
+        #expect(throws: BSATNError.self) {
+            _ = try compressible.getQueryUpdate()
         }
     }
 }
