@@ -2,7 +2,7 @@
 //  Range.swift
 //  spacetimedb-swift-sdk
 //
-//  Phase 15: SpacetimeDB Bound + Range value types. Mirrors the TS v3
+//  SpacetimeDB Bound + Range value types. Mirrors the TS v3
 //  SDK's `range.ts` shape (`Bound<T>` + `Range<T>`) used by typed
 //  index filters: `db.user.byEmail.filter(Range.starting("a"))`.
 //

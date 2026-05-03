@@ -174,16 +174,16 @@ public actor SpacetimeDBClient {
         let continuation: CheckedContinuation<Data, Error>
     }
 
-    // Phase 3: AsyncStream continuation registries (one bucket per channel).
+    // AsyncStream continuation registries (one bucket per channel).
     internal var connectionContinuations: [UUID: AsyncStream<ConnectionEvent>.Continuation] = [:]
     internal var reducerContinuations: [UUID: AsyncStream<ReducerEvent>.Continuation] = [:]
     internal var subscriptionContinuations: [UUID: AsyncStream<SubscriptionLifecycleEvent>.Continuation] = [:]
     internal var tableContinuations: [String: [UUID: AsyncStream<TableEvent>.Continuation]] = [:]
     internal var rowContinuations: [String: [UUID: AsyncStream<RowEvent>.Continuation]] = [:]
-    // Phase 14: foreign-client transaction events.
+    // Foreign-client transaction events.
     internal var transactionContinuations: [UUID: AsyncStream<TransactionEvent>.Continuation] = [:]
 
-    // Phase 4: pending-future registries for SubscriptionHandle.applied()/unsubscribe().
+    // Pending-future registries for SubscriptionHandle.applied()/unsubscribe().
     internal var pendingAppliedContinuations: [UInt32: [CheckedContinuation<Void, Error>]] = [:]
     internal var pendingUnsubscribeContinuations: [UInt32: [CheckedContinuation<Void, Error>]] = [:]
 

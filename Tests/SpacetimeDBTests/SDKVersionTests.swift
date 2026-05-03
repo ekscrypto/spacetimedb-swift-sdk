@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import SpacetimeDB
 
-@Suite("Phase 14: SDKVersion compatibility check")
+@Suite("SDKVersion compatibility check")
 struct SDKVersionTests {
 
     @Test func parsesValidSemver() {

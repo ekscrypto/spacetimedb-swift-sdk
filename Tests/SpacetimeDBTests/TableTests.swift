@@ -3,7 +3,7 @@ import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-@Suite("Phase 11: Table<Row> typed view")
+@Suite("Table<Row> typed view")
 struct TableTests {
 
     struct PKRow: BSATNTableWithPrimaryKey, Equatable {

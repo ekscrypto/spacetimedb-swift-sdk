@@ -154,7 +154,7 @@ struct RowEventTests {
     }
 
     /// TableEvent stream still gets the FULL deletes + inserts arrays
-    /// (not matched-only) — Phase 6 doesn't change Phase 3 semantics.
+    /// (not matched-only) — PK matching only affects rowEvents.
     @Test func tableEventStreamUnchangedByPKMatching() async throws {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
         await client.registerTableRowDecoder(PKRow.self)

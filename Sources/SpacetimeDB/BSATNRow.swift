@@ -2,7 +2,7 @@
 //  BSATNRow.swift
 //  spacetimedb-swift-sdk
 //
-//  Phase 5: protocol-based boilerplate killer for table rows.
+//  Protocol-based boilerplate killer for table rows.
 //
 //  A `BSATNRow` is a value type that knows how to decode itself
 //  from a `BSATNReader` field-by-field, in declared order. The SDK

@@ -358,7 +358,7 @@ struct QuickstartChat {
         }
     }
 
-    /// Phase 10 streams-only path. Replaces ChatClientDelegate with the
+    /// Streams-only path. Replaces ChatClientDelegate with the
     /// AsyncStream + SubscriptionHandle + Credentials API. Triggered
     /// via `quickstart-chat --streams`.
     static func runStreamsMode(config: ClientConfig) async {

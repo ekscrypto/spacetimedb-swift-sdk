@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import BSATN
 
-@Suite("Phase 15: Range + Bound Tests")
+@Suite("Range + Bound Tests")
 struct RangeTests {
 
     // MARK: Bound

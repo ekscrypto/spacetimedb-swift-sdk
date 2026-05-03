@@ -72,7 +72,7 @@ struct ObservableTableTests {
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
 
-        // PK-matched delete + insert → folded into .updated by Phase 6.
+        // PK-matched delete + insert → folded into .updated by the SDK.
         await client.emit(tableEvent: TableEvent(
             tableName: "obs_test",
             deletes: [TestRow(id: 7, name: "old")],

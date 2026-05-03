@@ -3,8 +3,8 @@ import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-@Suite("Phase 9 polish Tests")
-struct Phase9Tests {
+@Suite("Client polish: gzip, confirmedReads, Credentials, subscribeToAllTables")
+struct ClientPolishTests {
 
     // MARK: Gzip decompression
 

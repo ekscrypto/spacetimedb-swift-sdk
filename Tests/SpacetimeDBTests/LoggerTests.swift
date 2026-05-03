@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import SpacetimeDB
 
-@Suite("Phase 12: Logger redaction + level gating")
+@Suite("Logger redaction + level gating")
 struct LoggerTests {
 
     // MARK: Redaction

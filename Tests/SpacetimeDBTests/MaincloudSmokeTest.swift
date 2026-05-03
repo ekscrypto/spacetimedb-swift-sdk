@@ -17,16 +17,15 @@ struct MaincloudSmokeTest {
         ProcessInfo.processInfo.environment["SPACETIMEDB_LIVE"] == "1"
     }
 
-    /// New handle-based subscribe API: `applied()` round-trips to the live
-    /// server, then `unsubscribe()` round-trips back. This is the Phase 4
-    /// end-to-end assertion.
+    /// Handle-based subscribe API: `applied()` round-trips to the live
+    /// server, then `unsubscribe()` round-trips back. End-to-end assertion.
     @Test(.enabled(if: MaincloudSmokeTest.enabled))
     func subscribeAppliedThenUnsubscribeRoundTrip() async throws {
         let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
         let connected = await client.connectionEvents
 
-        // Connect with a no-op delegate (delegate is still required by the
-        // current connect() signature; Phase ≥10 will collapse it).
+        // Connect with a no-op delegate (delegate is still accepted by the
+        // current connect() signature for legacy callers).
         actor NoopDelegate: SpacetimeDBClientDelegate {
             nonisolated func onConnect(client: SpacetimeDBClient) async {}
             nonisolated func onError(client: SpacetimeDBClient, error: any Error) async {}

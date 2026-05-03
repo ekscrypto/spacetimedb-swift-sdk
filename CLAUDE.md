@@ -26,7 +26,7 @@ This document focuses on **implementation details** not covered in the README.
    - Client → Server and Server → Client message types are defined in `Sources/SpacetimeDB/Tags.swift`
 
 3. **Table Row Decoders**: Tables require registered decoders before data can be received
-   - **Recommended (Phase 5+)**: adopt the `BSATNRow` protocol on the row struct (just `init(reader:)` + `static var tableName`); register with `client.registerTableRowDecoder(MyRow.self)`. For tables with a primary key, adopt `BSATNTableWithPrimaryKey` instead — that unlocks `.updated(old:new:)` events on the per-row stream.
+   - **Recommended**: adopt the `BSATNRow` protocol on the row struct (just `init(reader:)` + `static var tableName`); register with `client.registerTableRowDecoder(MyRow.self)`. For tables with a primary key, adopt `BSATNTableWithPrimaryKey` instead — that unlocks `.updated(old:new:)` events on the per-row stream.
    - **Legacy**: implement `TableRowDecoder` directly with a `ProductModel` and a `decode(modelValues:)` method. Still supported via a default `decode(reader:)` extension that reads the AlgebraicValue first.
    - The codegen tool `spacetime-swift generate` emits `BSATNRow`/`BSATNTableWithPrimaryKey`-based files automatically.
 
@@ -36,10 +36,10 @@ This document focuses on **implementation details** not covered in the README.
    - Codegen also emits per-reducer `<Name>Reducer` structs.
 
 5. **Subscription Management**: Clients can subscribe and unsubscribe from data changes
-   - **Recommended (Phase 4+)**: `let handle = try await client.subscribe([...])` returns a `SubscriptionHandle`; await `handle.applied()` and later `handle.unsubscribe()`. Use `client.subscribeToAllTables()` (Phase 9) to subscribe to every registered table.
+   - **Recommended**: `let handle = try await client.subscribe([...])` returns a `SubscriptionHandle`; await `handle.applied()` and later `handle.unsubscribe()`. Use `client.subscribeToAllTables()` to subscribe to every registered table.
    - **Legacy**: `subscribeMulti(queries:queryId:)` / `subscribe(queries:requestId:)` / `unsubscribe(queryId:)` / `unsubscribeSingle(queryId:)` still work as wire-level primitives.
 
-6. **Event surface (Phase 3+)**: prefer AsyncStreams over the delegate.
+6. **Event surface**: prefer AsyncStreams over the delegate.
    - `client.connectionEvents` — `.connected/.reconnecting/.disconnected/.error`
    - `client.reducerEvents` — typed `ReducerStatus` + `EnergyQuanta`
    - `client.subscriptionEvents` — `.applied/.unsubscribed/.error`
@@ -49,7 +49,7 @@ This document focuses on **implementation details** not covered in the README.
 
 ### Architecture Decisions
 
-- **No SDK-level interpretation**: The SDK passes data to the delegate without interpreting changes — rename detection is done by the client. The streams API does it for free via Phase 6 PK matching when the row adopts `BSATNTableWithPrimaryKey`.
+- **No SDK-level interpretation**: The SDK passes data to the delegate without interpreting changes — rename detection is done by the client. The streams API does it for free via PK matching when the row adopts `BSATNTableWithPrimaryKey`.
 - **Batched updates**: All table updates for a transaction are batched before notifying delegate AND before fanning out to the per-table stream.
 - **Offsets in BsatnRowList**: Offsets mark the START position of rows in the data blob, not the end
 - **Subscription readiness**: Wait for `SubscriptionHandle.applied()` (or the legacy `onSubscribeMultiApplied` delegate call) before processing user commands. **Streams-mode trap**: subscribing before the server's `IdentityToken` arrives hangs against maincloud — always wait for `ConnectionEvent.connected` before calling `subscribe(...)`. See `Sources/quickstart-chat/StreamsChat.swift` for the canonical pattern.
@@ -73,7 +73,7 @@ swift build
    ```
    Connection-only is read-safe; reducer calls (`/name`, send-message) post to a shared module — get explicit user authorization before doing more than connect+subscribe.
 7. **`swiftpm-testing-helper` SIGSEGV/SIGBUS on incremental builds**: when adding/removing public methods on classes consumed by the test bundle (notably `BSATNWriter`, `BSATNReader`), incremental rebuilds can leave the test xctest binary linked against a stale class layout. The helper then crashes (SIGSEGV/SIGBUS) inside `_ArrayBuffer.count.getter` when running the stale bundle. Tests themselves are fine. Workaround: `rm -rf .build && swift test` after such changes. Report this to swift.org if it reproduces on a non-macOS-26 toolchain.
-8. **`BsatnRowList` wire format** (canonical): `{ size_hint: RowSizeHint, rows_data: [u8] }` where `RowSizeHint` is a tagged enum: `tag 0 = FixedSize(u16)` (every row in `rows_data` is N bytes) and `tag 1 = RowOffsets(u32 count + count*u64)` (explicit row-start offsets). `rows_data` is `u32 size + size bytes`. The original SDK parser misinterpreted `tag 0` as "empty list, no further bytes" — fixed in commit handling Phase 10 follow-up. The reference is `sdks/csharp/src/SpacetimeDB/ClientApi/{BsatnRowList,RowSizeHint}.g.cs` in the upstream `clockworklabs/SpacetimeDB` repo.
+8. **`BsatnRowList` wire format** (canonical): `{ size_hint: RowSizeHint, rows_data: [u8] }` where `RowSizeHint` is a tagged enum: `tag 0 = FixedSize(u16)` (every row in `rows_data` is N bytes) and `tag 1 = RowOffsets(u32 count + count*u64)` (explicit row-start offsets). `rows_data` is `u32 size + size bytes`. The original SDK parser misinterpreted `tag 0` as "empty list, no further bytes" — since fixed. The reference is `sdks/csharp/src/SpacetimeDB/ClientApi/{BsatnRowList,RowSizeHint}.g.cs` in the upstream `clockworklabs/SpacetimeDB` repo.
 9. **Stream accessors are actor-isolated**: `client.connectionEvents` / `.reducerEvents` / `.subscriptionEvents` / `.tableEvents(named:)` / `.rowEvents(table:)` are actor-isolated (`await` required). Earlier nonisolated forms registered the `AsyncStream.Continuation` via a fire-and-forget `Task` and silently dropped events fired before the registration ran. The fix moved registration inside the `AsyncStream` builder closure (which runs on the actor when the property is awaited). `SubscriptionHandle.events` is similarly `async` for the same reason. `ObservableTable.init` is `async` so it can pre-register before returning.
 10. **Keychain headless blocking**: `Credentials.save(service:account:)` and `.load(service:account:)` may prompt for Touch ID / password on macOS when called from unsigned binaries (incl. `swift run`, `swift test`, CI). For headless contexts, use the file-backed overloads `save(to:)` / `load(from:)`. The `--streams` quickstart-chat demo uses the file path for this reason; real iOS/macOS apps in proper bundles can use the Keychain path.
 
@@ -169,7 +169,7 @@ Debug mode is **disabled by default** to keep console output clean in production
 
 ### Current Known Issues
 
-1. ~~Gzip compression is not implemented~~ ✅ **Fixed** - Full RFC 1952 support via `MessageDecompression.gzip` (Phase 15 confirmed)
+1. ~~Gzip compression is not implemented~~ ✅ **Fixed** - Full RFC 1952 support via `MessageDecompression.gzip`
 2. ~~No automatic reconnection on connection loss~~ ✅ **Fixed** - Auto-reconnect with exponential backoff
 3. ~~Cannot unsubscribe from queries once subscribed~~ ✅ **Fixed** - Both single and multi unsubscribe implemented and tested
 4. ~~No heartbeat/keepalive mechanism~~ ✅ **Fixed** - Native URLSessionWebSocketTask ping/pong

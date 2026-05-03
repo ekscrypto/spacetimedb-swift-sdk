@@ -87,7 +87,7 @@ struct CodegenEndToEndTests {
         try typecheck(files: SwiftEmitter(schema: doc).emit())
     }
 
-    // MARK: Phase 8b — richer fixture (arrays, named refs, named sums)
+    // MARK: Richer fixture (arrays, named refs, named sums)
 
     @Test func richFixtureEmitsAccountRoleAndAddress() throws {
         let url = Bundle.module.url(forResource: "synthetic-rich", withExtension: "json")!
@@ -229,7 +229,7 @@ struct CodegenEndToEndTests {
         #expect(!src.contains("public let home: QueryColumn"))
     }
 
-    // MARK: Phase 11 — typed Db accessor emission
+    // MARK: Typed Db accessor emission
 
     @Test func emitsDbWithTypedTableProperties() throws {
         let doc = try Self.loadSchema()
@@ -244,7 +244,7 @@ struct CodegenEndToEndTests {
         #expect(src.contains("message: Table<MessageRow>(client: client)"))
     }
 
-    // MARK: Phase 13 — Reducers view + Db carries client/reducers/context
+    // MARK: Reducers view + Db carries client/reducers/context
 
     @Test func emitsReducersViewWithEachReducerAsMethod() throws {
         let doc = try Self.loadSchema()

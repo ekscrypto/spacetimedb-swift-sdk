@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import BSATN
 
-@Suite("Phase 15: Uuid (Nil/V4/V7/Max) Tests")
+@Suite("Uuid (Nil/V4/V7/Max) Tests")
 struct UuidTests {
 
     private static let payload = UInt128(u0: 0xDEADBEEF, u1: 0xFEEDFACE)

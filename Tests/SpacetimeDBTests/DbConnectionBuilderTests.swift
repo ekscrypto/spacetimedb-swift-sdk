@@ -3,7 +3,7 @@ import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-@Suite("Phase 12: DbConnectionBuilder")
+@Suite("DbConnectionBuilder")
 struct DbConnectionBuilderTests {
 
     @Test func builderCarriesEveryConfiguredOption() {

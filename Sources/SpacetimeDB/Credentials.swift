@@ -2,7 +2,7 @@
 //  Credentials.swift
 //  spacetimedb-swift-sdk
 //
-//  Phase 9: Keychain-backed token + identity persistence so apps don't
+//  Keychain-backed token + identity persistence so apps don't
 //  have to re-implement TokenStorage from scratch every time.
 //
 //  Apple-platform Keychain on the default path; falls back to a JSON

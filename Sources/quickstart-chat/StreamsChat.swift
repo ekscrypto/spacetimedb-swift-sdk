@@ -2,7 +2,7 @@
 //  StreamsChat.swift
 //  quickstart-chat
 //
-//  Phase 10: streams-only demonstration of the SDK's modern surface —
+//  Streams-only demonstration of the SDK's modern surface —
 //  no `SpacetimeDBClientDelegate`, just AsyncStreams + SubscriptionHandle
 //  + Credentials.
 //
@@ -48,9 +48,9 @@ actor StreamsChat {
 
         try await client.connect(token: initialToken)
         await waitForConnected()
-        // Phase-9-fix verified: BsatnRowList parser now correctly handles
-        // both FixedSize and RowOffsets size_hint variants. subscribeToAllTables
-        // (alphabetical [message, user]) now works against maincloud.
+        // BsatnRowList parser handles both FixedSize and RowOffsets
+        // size_hint variants, so subscribeToAllTables (alphabetical
+        // [message, user]) works against maincloud.
         subscription = try await client.subscribeToAllTables()
         try await subscription?.applied()
         subscriptionReady = true
@@ -69,10 +69,10 @@ actor StreamsChat {
 
     // MARK: Stream consumers
 
-    // Stream accessors are now actor-isolated to eliminate the Phase-3
-    // continuation-registration race; each consumer awaits the accessor
-    // inside its Task so registration happens synchronously inside the
-    // SDK actor before the Task starts iterating.
+    // Stream accessors are actor-isolated to eliminate a continuation-
+    // registration race; each consumer awaits the accessor inside its
+    // Task so registration happens synchronously inside the SDK actor
+    // before the Task starts iterating.
 
     private func startConnectionConsumer() -> Task<Void, Never> {
         Task { [weak self] in

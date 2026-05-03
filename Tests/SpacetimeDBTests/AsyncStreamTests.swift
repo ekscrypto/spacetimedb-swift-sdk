@@ -115,8 +115,8 @@ struct AsyncStreamTests {
         #expect(afterCancel == 0)
     }
 
-    /// Regression test for the original Phase-3 race: emitting an event
-    /// the instant after the stream accessor returns must not be lost.
+    /// Regression test for the original stream-registration race: emitting
+    /// an event the instant after the stream accessor returns must not be lost.
     @Test func emitImmediatelyAfterAccessIsNotLost() async throws {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
         let stream = await client.subscriptionEvents

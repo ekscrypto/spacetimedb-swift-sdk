@@ -3,7 +3,7 @@ import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-@Suite("Phase 13: EventContext + variadic subscribe")
+@Suite("EventContext + variadic subscribe")
 struct EventContextTests {
 
     struct FakeDb: Sendable {

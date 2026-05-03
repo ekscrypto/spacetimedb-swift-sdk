@@ -159,7 +159,7 @@ extension SpacetimeDBClient {
 
     private func handleTransactionUpdate(reader: BSATNReader) async throws {
         let update = try TransactionUpdate(reader: reader)
-        // Phase 14: surface the foreign-client transaction marker on the
+        // Surface the foreign-client transaction marker on the
         // dedicated stream BEFORE fanning out row diffs. The marker
         // carries enough metadata for observers to distinguish foreign
         // transactions from their own reducer responses without having

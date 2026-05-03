@@ -2,9 +2,9 @@
 //  SDKVersion.swift
 //  spacetimedb-swift-sdk
 //
-//  Phase 14: codegen / SDK version pin. Codegen embeds the
-//  `spacetime-swift` CLI version it was built with as a string in
-//  generated `Db.swift`; the SDK validates that against
+//  Codegen / SDK version pin. Codegen embeds the `spacetime-swift`
+//  CLI version it was built with as a string in generated `Db.swift`;
+//  the SDK validates that against
 //  `SDKVersion.minimumCompatibleCodegenVersion` at `Db.attach(to:)`
 //  time and throws if the codegen is too old to be safe.
 //

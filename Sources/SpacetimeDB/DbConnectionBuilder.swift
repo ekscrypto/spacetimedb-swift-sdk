@@ -2,7 +2,7 @@
 //  DbConnectionBuilder.swift
 //  spacetimedb-swift-sdk
 //
-//  Phase 12: TS v3-style fluent builder for `SpacetimeDBClient`.
+//  TS v3-style fluent builder for `SpacetimeDBClient`.
 //
 //      let client = try SpacetimeDBClient.builder()
 //          .withUri("https://maincloud.spacetimedb.com")

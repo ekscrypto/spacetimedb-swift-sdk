@@ -3,7 +3,7 @@ import Foundation
 @testable import SpacetimeDB
 @testable import BSATN
 
-@Suite("Phase 14: TransactionEvent stream")
+@Suite("TransactionEvent stream")
 struct TransactionEventTests {
 
     @Test func transactionEventStreamReceivesEmissions() async throws {

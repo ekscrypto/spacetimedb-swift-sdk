@@ -181,7 +181,7 @@ struct MaincloudParitySmokeTest {
     }
 
     @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
-    func phase11TypedTableCachePopulatesAfterSubscribe() async throws {
+    func typedTableCachePopulatesAfterSubscribe() async throws {
         try await withTimeout {
             let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
             await client.registerTableRowDecoder(UserRow.self)
@@ -214,7 +214,7 @@ struct MaincloudParitySmokeTest {
     }
 
     @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
-    func phase12BuilderConnectsAndCallsReducer() async throws {
+    func builderConnectsAndCallsReducer() async throws {
         try await withTimeout {
             let client = try SpacetimeDBClient.builder()
                 .withUri(Self.host)
@@ -232,7 +232,7 @@ struct MaincloudParitySmokeTest {
     }
 
     @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
-    func phase13VariadicSubscribeAndEventContext() async throws {
+    func variadicSubscribeAndEventContext() async throws {
         // Variadic subscribe overload + EventContext wiring end-to-end.
         try await withTimeout {
             let client = try SpacetimeDBClient.builder()
@@ -263,7 +263,7 @@ struct MaincloudParitySmokeTest {
     }
 
     @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
-    func phase12LightModeReducerFireAndForget() async throws {
+    func lightModeReducerFireAndForget() async throws {
         try await withTimeout {
             // Light mode: callReducer returns immediately because the
             // server suppresses the success-side TransactionUpdate echo.

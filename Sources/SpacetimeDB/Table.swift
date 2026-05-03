@@ -2,7 +2,7 @@
 //  Table.swift
 //  spacetimedb-swift-sdk
 //
-//  Phase 11: typed `Table<Row>` view — a cached, callback-driven mirror
+//  Typed `Table<Row>` view — a cached, callback-driven mirror
 //  of a SpacetimeDB table. Mirrors the TS v3 `connection.db.<tableName>`
 //  surface: `count`, `iter()`, `onInsert/onDelete/onUpdate`, and (for PK
 //  tables) `find(_:)`.

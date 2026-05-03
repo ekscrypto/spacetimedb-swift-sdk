@@ -2,7 +2,7 @@
 //  EventContext.swift
 //  spacetimedb-swift-sdk
 //
-//  Phase 13: TS v3-style event contexts. Every SDK callback that
+//  TS v3-style event contexts. Every SDK callback that
 //  surfaces row/reducer/subscription events can be paired with an
 //  `EventContext` carrying:
 //    - the live client (so the callback can issue further reducer or

@@ -2,7 +2,7 @@
 //  ObservableTable.swift
 //  spacetimedb-swift-sdk
 //
-//  Phase 7: SwiftUI / Observation add-on. Mirrors a SpacetimeDB table's
+//  SwiftUI / Observation add-on. Mirrors a SpacetimeDB table's
 //  rows (delivered through `client.rowEvents(table:)`) into a
 //  `@Observable` collection that drives SwiftUI updates without any
 //  manual diff/state plumbing.

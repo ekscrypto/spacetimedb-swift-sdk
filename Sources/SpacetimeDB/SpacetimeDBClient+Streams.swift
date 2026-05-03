@@ -2,7 +2,7 @@
 //  SpacetimeDBClient+Streams.swift
 //  spacetimedb-swift-sdk
 //
-//  Phase 3: AsyncStream event surface. The streams API runs in parallel
+//  AsyncStream event surface. The streams API runs in parallel
 //  with the legacy `SpacetimeDBClientDelegate` — both fire from the same
 //  receive loop, so application code may pick either or both.
 //
@@ -109,7 +109,7 @@ extension SpacetimeDBClient {
         }
     }
 
-    /// Phase 14: foreign-client transaction events. Fires once per
+    /// Foreign-client transaction events. Fires once per
     /// `TransactionUpdate` server message, which is sent for transactions
     /// that affected this client's subscriptions but were initiated by
     /// another client. (Transactions caused by THIS client's reducers

@@ -2,7 +2,7 @@
 //  Logger.swift
 //  spacetimedb-swift-sdk
 //
-//  Phase 12: namespaced logger with secret redaction. Mirrors TS v3's
+//  Namespaced logger with secret redaction. Mirrors the TS v3 SDK's
 //  `stdbLogger`: every emitted message gets a `[<namespace>]` prefix
 //  and goes through a redaction pass that masks bearer tokens and
 //  any field whose key matches the redacted-keys allowlist below.
@@ -10,8 +10,8 @@
 //  The library does not own user logging; this surface is only used
 //  internally by the SDK and exposed publicly so that applications
 //  embedding the SDK can mirror the same redaction rules. Replacing
-//  the sink is intentionally not a public API yet (Phase 12 scope) —
-//  filed as a follow-up if needed.
+//  the sink is intentionally not a public API yet — filed as a
+//  follow-up if needed.
 //
 
 import Foundation

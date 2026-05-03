@@ -2,7 +2,7 @@
 //  Uuid.swift
 //  spacetimedb-swift-sdk
 //
-//  Phase 15: SpacetimeDB Uuid value type. Mirrors the TS v3 SDK's
+//  SpacetimeDB Uuid value type. Mirrors the TS v3 SDK's
 //  `Uuid` sum: `Nil` / `V4` / `V7` / `Max` variants, all backed by
 //  a single u128 payload on the wire.
 //
