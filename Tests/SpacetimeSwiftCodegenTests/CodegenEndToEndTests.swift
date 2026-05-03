@@ -32,6 +32,7 @@ struct CodegenEndToEndTests {
             "MessageRow.swift",
             "SendMessageReducer.swift",
             "SetNameReducer.swift",
+            "Db.swift",
         ])
     }
 
@@ -99,6 +100,7 @@ struct CodegenEndToEndTests {
             "UserRole.swift",
             "AddTagsReducer.swift",
             "SetRoleReducer.swift",
+            "Db.swift",
         ])
     }
 
@@ -225,6 +227,29 @@ struct CodegenEndToEndTests {
         #expect(!src.contains("public let tags: QueryColumn"))
         #expect(!src.contains("public let role: QueryColumn"))
         #expect(!src.contains("public let home: QueryColumn"))
+    }
+
+    // MARK: Phase 11 — typed Db accessor emission
+
+    @Test func emitsDbWithTypedTableProperties() throws {
+        let doc = try Self.loadSchema()
+        let src = SwiftEmitter(schema: doc).emit()["Db.swift"] ?? ""
+        #expect(src.contains("public struct Db: Sendable"))
+        #expect(src.contains("public let user: Table<UserRow>"))
+        #expect(src.contains("public let message: Table<MessageRow>"))
+        #expect(src.contains("public static func attach(to client: SpacetimeDBClient) async -> Db"))
+        #expect(src.contains("await client.registerTableRowDecoder(UserRow.self)"))
+        #expect(src.contains("await client.registerTableRowDecoder(MessageRow.self)"))
+        #expect(src.contains("user: Table<UserRow>(client: client)"))
+        #expect(src.contains("message: Table<MessageRow>(client: client)"))
+    }
+
+    @Test func dbEmissionSkipsEventTables() throws {
+        let doc = try Self.loadEventFixture()
+        let src = SwiftEmitter(schema: doc).emit()["Db.swift"] ?? ""
+        // PlayerRow is a normal table; TelemetryEventRow is event-only and skipped.
+        #expect(src.contains("public let player: Table<PlayerRow>"))
+        #expect(!src.contains("Table<TelemetryEventRow>"))
     }
 
     @Test func tablesWithoutIsEventFieldDefaultToFalse() throws {

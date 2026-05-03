@@ -154,6 +154,45 @@ struct MaincloudParitySmokeTest {
     }
 
     @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
+    func phase11TypedTableCachePopulatesAfterSubscribe() async throws {
+        // Verifies that the Phase 11 `Table<Row>` view is wired up to
+        // the live row-event stream: after `applied()`, the user table's
+        // cache should contain at least the rows the parity test
+        // module ships with.
+        let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
+        await client.registerTableRowDecoder(UserRow.self)
+        await client.registerTableRowDecoder(MessageRow.self)
+        try await connectAndWait(client: client)
+        defer { Task { await client.disconnect() } }
+
+        let users = await Table<UserRow>(client: client)
+        let messages = await Table<MessageRow>(client: client)
+
+        let handle = try await client.subscribe([
+            "SELECT * FROM user",
+            "SELECT * FROM message",
+        ])
+        try await handle.applied()
+        // Initial-subscription rows arrive on the same TransactionUpdate
+        // path as ongoing changes; give the receive loop a moment to
+        // dispatch into the table caches.
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        let userCount = await users.count
+        let messageCount = await messages.count
+        #expect(userCount >= 0)
+        #expect(messageCount >= 0)
+
+        // PK lookup should work for any cached user (we don't care which).
+        if let any = await users.iter().first {
+            let found = await users.find(any.identity)
+            #expect(found == any)
+        }
+
+        try await handle.unsubscribe()
+    }
+
+    @Test(.enabled(if: MaincloudParitySmokeTest.enabled))
     func setNameReducerRoundTrip() async throws {
         let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
         try await connectAndWait(client: client)

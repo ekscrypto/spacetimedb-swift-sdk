@@ -63,7 +63,62 @@ struct SwiftEmitter {
             files["\(name).swift"] = emitReducer(reducer)
         }
 
+        // 4. Typed `Db` accessor — TS v3-style `connection.db.<table>` shape.
+        //    Emitted only when there's at least one non-event table to attach
+        //    (event tables don't have a client cache).
+        let cacheable = schema.tables.filter { !$0.isEvent }
+        if !cacheable.isEmpty {
+            files["Db.swift"] = emitDb(tables: cacheable)
+        }
+
         return files
+    }
+
+    // MARK: Db (typed table accessor) emission
+
+    private func emitDb(tables: [TableDef]) -> String {
+        struct Field {
+            let fieldName: String
+            let typeName: String
+        }
+        let fields = tables.map { table -> Field in
+            let row = swiftTypeName(table.name) + "Row"
+            return Field(fieldName: swiftFieldName(table.name), typeName: row)
+        }
+
+        var src = preamble
+        src += "/// Typed accessor for every cacheable table in this module.\n"
+        src += "/// Mirrors the TS v3 `connection.db.<tableName>` shape: each\n"
+        src += "/// property is a live `Table<Row>` whose cache, callbacks,\n"
+        src += "/// and PK lookups are wired to the underlying client.\n"
+        src += "public struct Db: Sendable {\n"
+        for field in fields {
+            src += "    public let \(field.fieldName): Table<\(field.typeName)>\n"
+        }
+        src += "\n    public init("
+        src += fields.map { "\($0.fieldName): Table<\($0.typeName)>" }.joined(separator: ", ")
+        src += ") {\n"
+        for field in fields {
+            src += "        self.\(field.fieldName) = \(field.fieldName)\n"
+        }
+        src += "    }\n"
+        src += "\n    /// Register every table row decoder on `client` and\n"
+        src += "    /// instantiate the per-table caches. Awaits each\n"
+        src += "    /// `Table.init` so the underlying row-event stream is\n"
+        src += "    /// registered before this returns.\n"
+        src += "    public static func attach(to client: SpacetimeDBClient) async -> Db {\n"
+        for field in fields {
+            src += "        await client.registerTableRowDecoder(\(field.typeName).self)\n"
+        }
+        src += "        return await Db(\n"
+        for (i, field) in fields.enumerated() {
+            let comma = i == fields.count - 1 ? "" : ","
+            src += "            \(field.fieldName): Table<\(field.typeName)>(client: client)\(comma)\n"
+        }
+        src += "        )\n"
+        src += "    }\n"
+        src += "}\n"
+        return src
     }
 
     // MARK: Table emission
