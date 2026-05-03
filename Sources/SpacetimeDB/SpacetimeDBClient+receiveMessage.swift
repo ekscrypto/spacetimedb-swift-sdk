@@ -35,6 +35,7 @@ extension SpacetimeDBClient {
     }
 
     private func processOrForwardMessage(_ data: Data) async {
+        await ClientMetrics.shared.recordReceived(db: dbName, byteCount: data.count)
         if debugEnabled {
             print("=== Received BSATN Message (\(data.count) bytes) ===")
             printHexData(data)

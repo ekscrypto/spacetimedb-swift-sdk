@@ -1,0 +1,51 @@
+{
+  "database": "synthetic-event",
+  "typespace": {
+    "types": [
+      {
+        "Product": {
+          "elements": [
+            { "name": { "some": "id" },    "algebraic_type": { "U64": [] } },
+            { "name": { "some": "name" },  "algebraic_type": { "String": [] } }
+          ]
+        }
+      },
+      {
+        "Product": {
+          "elements": [
+            { "name": { "some": "kind" },     "algebraic_type": { "String": [] } },
+            { "name": { "some": "value" },    "algebraic_type": { "U64": [] } }
+          ]
+        }
+      }
+    ]
+  },
+  "tables": [
+    {
+      "name": "player",
+      "product_type_ref": 0,
+      "primary_key": [0],
+      "is_event": false,
+      "indexes": [],
+      "constraints": [],
+      "sequences": [],
+      "schedule": { "none": [] },
+      "table_type": { "User": [] },
+      "table_access": { "Public": [] }
+    },
+    {
+      "name": "telemetry_event",
+      "product_type_ref": 1,
+      "primary_key": [],
+      "is_event": true,
+      "indexes": [],
+      "constraints": [],
+      "sequences": [],
+      "schedule": { "none": [] },
+      "table_type": { "User": [] },
+      "table_access": { "Public": [] }
+    }
+  ],
+  "reducers": [],
+  "types": []
+}

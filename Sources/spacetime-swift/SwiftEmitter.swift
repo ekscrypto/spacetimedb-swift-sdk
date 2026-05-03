@@ -84,7 +84,18 @@ struct SwiftEmitter {
 
         let typeName = swiftTypeName(table.name) + "Row"
         let isPK = !table.primaryKey.isEmpty
-        let conformance = isPK ? "BSATNTableWithPrimaryKey" : "BSATNRow"
+        // Event tables take precedence: per upstream, event tables have
+        // no resident rows so a primary key wouldn't be meaningful (and
+        // the v10 schema validators forbid combining the two). If we
+        // see both we drop PK and treat it as event.
+        let conformance: String
+        if table.isEvent {
+            conformance = "BSATNEventRow"
+        } else if isPK {
+            conformance = "BSATNTableWithPrimaryKey"
+        } else {
+            conformance = "BSATNRow"
+        }
 
         var src = preamble
         src += "public struct \(typeName): \(conformance), Equatable, Sendable {\n"
@@ -92,7 +103,7 @@ struct SwiftEmitter {
         for col in columns {
             src += "    public let \(col.fieldName): \(col.kind.swiftType)\n"
         }
-        if isPK, let pkIndex = table.primaryKey.first, pkIndex < columns.count {
+        if !table.isEvent, isPK, let pkIndex = table.primaryKey.first, pkIndex < columns.count {
             let pk = columns[pkIndex]
             src += "\n    public var primaryKey: \(pk.kind.swiftType) { \(pk.fieldName) }\n"
         }
@@ -102,6 +113,36 @@ struct SwiftEmitter {
         }
         src += "    }\n"
         src += "}\n"
+
+        // Emit BSATNRowQueryable conformance: typed columns for every
+        // SQL-encodable column. Unsupported types (arrays, nested
+        // structs) are skipped — callers can fall back to col(_:_:).
+        // The product columns we emit here use the source column name
+        // (NOT the Swift field name) for the SQL identifier, since
+        // that's what the server's catalog stores.
+        let queryable = columns.compactMap { col -> (String, String, String)? in
+            // (sqlName, swiftFieldName, queryColumnTypeParameter)
+            guard let sqlType = col.kind.sqlComparableType else { return nil }
+            return (product.elements[col.index].name.value ?? "field\(col.index)", col.fieldName, sqlType)
+        }
+        if !queryable.isEmpty {
+            src += "\nextension \(typeName): BSATNRowQueryable {\n"
+            src += "    public struct Cols: Sendable {\n"
+            for (_, fieldName, sqlType) in queryable {
+                src += "        public let \(fieldName): QueryColumn<\(typeName), \(sqlType)>\n"
+            }
+            src += "    }\n"
+            src += "    public static func makeCols(tableAlias: String) -> Cols {\n"
+            src += "        Cols(\n"
+            for (i, (sqlName, fieldName, sqlType)) in queryable.enumerated() {
+                let comma = i == queryable.count - 1 ? "" : ","
+                src += "            \(fieldName): QueryColumn<\(typeName), \(sqlType)>(tableAlias: tableAlias, name: \"\(sqlName)\")\(comma)\n"
+            }
+            src += "        )\n"
+            src += "    }\n"
+            src += "}\n"
+        }
+
         return src
     }
 
@@ -368,6 +409,25 @@ indirect enum SwiftKind {
         case .array(let inner):    return "[\(inner.swiftType)]"
         case .named(let name):     return name
         case .unsupported(let n):  return "/* unsupported: \(n) */ Data"
+        }
+    }
+
+    /// Returns the Swift type to use as the `V` parameter for
+    /// `QueryColumn<Row, V>` when this column appears in the typed
+    /// `Cols` struct, or `nil` if the column isn't SQL-comparable
+    /// (arrays, nested structs, unsupported types). Optionals are
+    /// supported via the `Optional: SQLLiteral` conformance.
+    var sqlComparableType: String? {
+        switch self {
+        case .bool, .uint8, .uint16, .uint32, .uint64, .uint128, .uint256,
+             .int8, .int16, .int32, .int64, .int128, .int256,
+             .float32, .float64, .string,
+             .identity, .timestamp, .connectionId, .timeDuration:
+            return swiftType
+        case .optional(let inner):
+            return inner.sqlComparableType.map { "\($0)?" }
+        case .array, .named, .unsupported:
+            return nil
         }
     }
 

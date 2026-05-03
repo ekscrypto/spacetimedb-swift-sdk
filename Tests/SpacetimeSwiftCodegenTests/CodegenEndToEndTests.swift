@@ -154,6 +154,88 @@ struct CodegenEndToEndTests {
         try typecheck(files: SwiftEmitter(schema: doc).emit())
     }
 
+    // MARK: Event-table fixture (Rust EventTable parity)
+
+    private static func loadEventFixture() throws -> SchemaDoc {
+        let url = Bundle.module.url(forResource: "synthetic-event", withExtension: "json")!
+        return try JSONDecoder().decode(SchemaDoc.self, from: Data(contentsOf: url))
+    }
+
+    @Test func eventTableFlagDecodesFromSchema() throws {
+        let doc = try Self.loadEventFixture()
+        let player = doc.tables.first { $0.name == "player" }!
+        let telemetry = doc.tables.first { $0.name == "telemetry_event" }!
+        #expect(player.isEvent == false)
+        #expect(telemetry.isEvent == true)
+    }
+
+    @Test func eventTableEmitsBSATNEventRow() throws {
+        let doc = try Self.loadEventFixture()
+        let src = SwiftEmitter(schema: doc).emit()["TelemetryEventRow.swift"] ?? ""
+        #expect(src.contains("public struct TelemetryEventRow: BSATNEventRow"))
+        #expect(!src.contains("BSATNTableWithPrimaryKey"))
+        #expect(!src.contains("BSATNRow,"))
+        #expect(!src.contains("primaryKey"))
+    }
+
+    @Test func nonEventTableStillEmitsPK() throws {
+        let doc = try Self.loadEventFixture()
+        let src = SwiftEmitter(schema: doc).emit()["PlayerRow.swift"] ?? ""
+        #expect(src.contains("public struct PlayerRow: BSATNTableWithPrimaryKey"))
+        #expect(src.contains("public var primaryKey: UInt64 { id }"))
+    }
+
+    @Test func eventFixtureGeneratedCodeTypeChecks() throws {
+        let doc = try Self.loadEventFixture()
+        try typecheck(files: SwiftEmitter(schema: doc).emit())
+    }
+
+    // MARK: Typed-query Cols emission (Rust query-builder parity)
+
+    @Test func userRowEmitsBSATNRowQueryableCols() throws {
+        let doc = try Self.loadSchema()
+        let src = SwiftEmitter(schema: doc).emit()["UserRow.swift"] ?? ""
+        #expect(src.contains("extension UserRow: BSATNRowQueryable"))
+        #expect(src.contains("public struct Cols: Sendable"))
+        // Identity column with the SQL column name preserved.
+        #expect(src.contains("public let identity: QueryColumn<UserRow, Identity>"))
+        // Optional name column — Optional<String> is SQL-encodable.
+        #expect(src.contains("public let name: QueryColumn<UserRow, String?>"))
+        #expect(src.contains("public let online: QueryColumn<UserRow, Bool>"))
+        #expect(src.contains("identity: QueryColumn<UserRow, Identity>(tableAlias: tableAlias, name: \"identity\")"))
+    }
+
+    @Test func messageRowColsIncludesPrimitivesOnly() throws {
+        let doc = try Self.loadSchema()
+        let src = SwiftEmitter(schema: doc).emit()["MessageRow.swift"] ?? ""
+        // sender (Identity), sent (Timestamp), text (String) are all
+        // SQL-encodable; column emitted for each.
+        #expect(src.contains("public let sender: QueryColumn<MessageRow, Identity>"))
+        #expect(src.contains("public let sent: QueryColumn<MessageRow, Timestamp>"))
+        #expect(src.contains("public let text: QueryColumn<MessageRow, String>"))
+    }
+
+    @Test func richFixtureColsSkipUnsupportedTypes() throws {
+        let url = Bundle.module.url(forResource: "synthetic-rich", withExtension: "json")!
+        let doc = try JSONDecoder().decode(SchemaDoc.self, from: Data(contentsOf: url))
+        let src = SwiftEmitter(schema: doc).emit()["AccountRow.swift"] ?? ""
+        // id, email primitive; tags is [String] (skipped); role / home are named refs (skipped).
+        #expect(src.contains("public let id: QueryColumn<AccountRow, UInt64>"))
+        #expect(src.contains("public let email: QueryColumn<AccountRow, String>"))
+        #expect(!src.contains("public let tags: QueryColumn"))
+        #expect(!src.contains("public let role: QueryColumn"))
+        #expect(!src.contains("public let home: QueryColumn"))
+    }
+
+    @Test func tablesWithoutIsEventFieldDefaultToFalse() throws {
+        // The maincloud quickstart-chat fixture predates is_event; make
+        // sure the optional decode path treats it as false.
+        let doc = try Self.loadSchema()
+        for table in doc.tables {
+            #expect(table.isEvent == false)
+        }
+    }
+
     // MARK: Helpers
 
     private func typecheck(files: [String: String]) throws {

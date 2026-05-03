@@ -49,11 +49,24 @@ struct TableDef: Decodable {
     let name: String
     let productTypeRef: Int
     let primaryKey: [Int]
+    /// Whether the table is an event table (Rust's `#[table(... event)]`).
+    /// Event tables have transient rows: only inserts arrive, never
+    /// deletes or updates, and there is no client-side cache.
+    let isEvent: Bool
 
     enum CodingKeys: String, CodingKey {
         case name
         case productTypeRef = "product_type_ref"
         case primaryKey = "primary_key"
+        case isEvent = "is_event"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.productTypeRef = try c.decode(Int.self, forKey: .productTypeRef)
+        self.primaryKey = try c.decode([Int].self, forKey: .primaryKey)
+        self.isEvent = (try? c.decodeIfPresent(Bool.self, forKey: .isEvent)) ?? false
     }
 }
 

@@ -18,6 +18,16 @@ public enum ProcedureCallError: Error {
 }
 
 extension SpacetimeDBClient {
+    /// Invoke a procedure with typed arguments and return value.
+    /// Mirrors `callReducer(_:)` for the `Reducer` family.
+    @discardableResult
+    public func callProcedure<P: Procedure>(_ procedure: P) async throws -> P.ReturnValue {
+        let writer = BSATNWriter()
+        try procedure.encodeArguments(writer: writer)
+        let raw = try await callProcedure(name: procedure.name, arguments: writer.finalize())
+        return try procedure.decodeReturnValue(raw)
+    }
+
     /// Invoke a procedure and suspend until the server responds.
     /// On `.returned`, the BSATN-encoded payload is returned to the
     /// caller; on `.internalError`, throws `ProcedureCallError`.
