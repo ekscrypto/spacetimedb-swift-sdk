@@ -99,7 +99,7 @@ extension SpacetimeDBClient {
             if messageTag == Tags.ServerMessage.initialSubscription.rawValue {
                 // Handle InitialSubscription (used for single subscriptions)
                 debugLog(">>> InitialSubscription message received")
-                
+
                 // Parse InitialSubscription similar to SubscribeMultiApplied
                 // InitialSubscription contains the same DatabaseUpdate structure
                 do {
@@ -125,9 +125,7 @@ extension SpacetimeDBClient {
                                     }
                                     do {
                                         let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                        let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
-                                        guard case .product(let values) = modelValue else { continue }
-                                        let typedRow = try decoder.decode(modelValues: values)
+                                        let typedRow = try decoder.decode(reader: reader)
                                         insertedRows.append(typedRow)
                                     } catch {
                                         debugLog(">>>     Error decoding inserted row \(index): \(error)")
@@ -143,16 +141,19 @@ extension SpacetimeDBClient {
                                     }
                                     do {
                                         let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                        let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
-                                        guard case .product(let values) = modelValue else { continue }
-                                        let typedRow = try decoder.decode(modelValues: values)
+                                        let typedRow = try decoder.decode(reader: reader)
                                         deletedRows.append(typedRow)
                                     } catch {
                                         debugLog(">>>     Error decoding deleted row \(index): \(error)")
                                     }
                                 }
 
-                                // Notify delegate
+                                // Notify both legacy delegate and AsyncStream subscribers.
+                                self.emit(tableEvent: TableEvent(
+                                    tableName: tableUpdate.name,
+                                    deletes: deletedRows,
+                                    inserts: insertedRows
+                                ))
                                 await clientDelegate?.onTableUpdate(
                                     client: self,
                                     table: tableUpdate.name,
@@ -166,14 +167,16 @@ extension SpacetimeDBClient {
                             debugLog(">>>   Error parsing QueryUpdate: \(error)")
                         }
                     }
-                    
+
                     // Notify delegate that subscription is ready with hardcoded queryId: 1
                     debugLog(">>> About to call onSubscribeMultiApplied with hardcoded queryId: 1")
                     clientDelegate?.onSubscribeMultiApplied(client: self, queryId: 1)
+                    self.emit(subscription: .applied(queryId: 1, multi: true))
                 } catch {
                     debugLog(">>> Error parsing InitialSubscription: \(error)")
                     // Fallback to just notifying subscription ready
                     clientDelegate?.onSubscribeMultiApplied(client: self, queryId: 1)
+                    self.emit(subscription: .applied(queryId: 1, multi: true))
                 }
             } else if messageTag == Tags.ServerMessage.identityToken.rawValue {
                 // Read IdentityTokenMessage
@@ -184,12 +187,18 @@ extension SpacetimeDBClient {
                 ])
                 debugLog(">>> Identity: \(identityToken)")
 
-                // Store current identity and token (so reconnects reuse the server-issued token)
+                // Store current identity, connectionId, and token (so reconnects reuse the server-issued token)
                 self.currentIdentity = identityToken.identity
+                self.currentConnectionId = identityToken.connectionId
                 self.lastToken = AuthenticationToken(rawValue: identityToken.token)
                 // IdentityToken proves the server accepted us → reset reconnect state.
                 self.reconnectAttempts = 0
                 await clientDelegate?.onIdentityReceived(client: self, token: identityToken.token, identity: identityToken.identity)
+                self.emit(connection: .connected(
+                    identity: Identity(identityToken.identity),
+                    connectionId: identityToken.connectionId,
+                    token: identityToken.token
+                ))
             } else if messageTag == Tags.ServerMessage.subscribeApplied.rawValue {
                 // Read SubscribeApplied (single subscription)
                 let subscribeApplied = try SubscribeAppliedMessage(reader: reader)
@@ -211,9 +220,7 @@ extension SpacetimeDBClient {
                             for (index, row) in queryUpdate.inserts.rows.enumerated() {
                                 do {
                                     let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                    let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
-                                    guard case .product(let values) = modelValue else { continue }
-                                    let typedRow = try decoder.decode(modelValues: values)
+                                    let typedRow = try decoder.decode(reader: reader)
                                     insertedRows.append(typedRow)
                                     debugLog(">>>     Row \(index) for \(tableUpdate.name): \(typedRow)")
                                 } catch {
@@ -221,7 +228,7 @@ extension SpacetimeDBClient {
                                 }
                             }
 
-                            // Process deletes  
+                            // Process deletes
                             var deletedRows: [Any] = []
                             for (index, row) in queryUpdate.deletes.rows.enumerated() {
                                 // Skip empty row data
@@ -230,16 +237,19 @@ extension SpacetimeDBClient {
                                 }
                                 do {
                                     let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                    let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
-                                    guard case .product(let values) = modelValue else { continue }
-                                    let typedRow = try decoder.decode(modelValues: values)
+                                    let typedRow = try decoder.decode(reader: reader)
                                     deletedRows.append(typedRow)
                                 } catch {
                                     debugLog(">>>     Error decoding deleted row \(index): \(error)")
                                 }
                             }
 
-                            // Notify delegate
+                            // Notify both legacy delegate and AsyncStream subscribers.
+                            self.emit(tableEvent: TableEvent(
+                                tableName: tableUpdate.name,
+                                deletes: deletedRows,
+                                inserts: insertedRows
+                            ))
                             await clientDelegate?.onTableUpdate(
                                 client: self,
                                 table: tableUpdate.name,
@@ -256,6 +266,8 @@ extension SpacetimeDBClient {
 
                 // Notify delegate about single subscription
                 clientDelegate?.onSubscribeApplied(client: self, queryId: subscribeApplied.queryId)
+                self.emit(subscription: .applied(queryId: subscribeApplied.queryId, multi: false))
+                self.resolveSubscriptionApplied(queryId: subscribeApplied.queryId)
             } else if messageTag == Tags.ServerMessage.subscribeMultiApplied.rawValue {
                 // Read SubscribeMultiApplied directly from reader
                 let subscribeMultiApplied = try SubscribeMultiApplied(reader: reader)
@@ -276,9 +288,7 @@ extension SpacetimeDBClient {
                             for (index, row) in queryUpdate.inserts.rows.enumerated() {
                                 do {
                                     let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                    let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
-                                    guard case .product(let values) = modelValue else { continue }
-                                    let typedRow = try decoder.decode(modelValues: values)
+                                    let typedRow = try decoder.decode(reader: reader)
                                     insertedRows.append(typedRow)
                                     debugLog(">>>     Row \(index) for \(tableUpdate.name): \(typedRow)")
                                 } catch {
@@ -295,16 +305,19 @@ extension SpacetimeDBClient {
                                 }
                                 do {
                                     let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                    let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
-                                    guard case .product(let values) = modelValue else { continue }
-                                    let typedRow = try decoder.decode(modelValues: values)
+                                    let typedRow = try decoder.decode(reader: reader)
                                     deletedRows.append(typedRow)
                                 } catch {
                                     debugLog(">>>     Error decoding deleted row \(index): \(error)")
                                 }
                             }
 
-                            // Notify delegate
+                            // Notify both legacy delegate and AsyncStream subscribers.
+                            self.emit(tableEvent: TableEvent(
+                                tableName: tableUpdate.name,
+                                deletes: deletedRows,
+                                inserts: insertedRows
+                            ))
                             await clientDelegate?.onTableUpdate(
                                 client: self,
                                 table: tableUpdate.name,
@@ -321,6 +334,8 @@ extension SpacetimeDBClient {
 
                 // Notify delegate
                 clientDelegate?.onSubscribeMultiApplied(client: self, queryId: subscribeMultiApplied.queryId)
+                self.emit(subscription: .applied(queryId: subscribeMultiApplied.queryId, multi: true))
+                self.resolveSubscriptionApplied(queryId: subscribeMultiApplied.queryId)
             } else if messageTag == Tags.ServerMessage.transactionUpdate.rawValue {
                 // Read TransactionUpdate - pass the reader directly instead of remainingData
                 debugLog(">>> Attempting to read TransactionUpdate from offset: \(reader.currentOffset)")
@@ -338,20 +353,21 @@ extension SpacetimeDBClient {
                 debugLog(">>>   Request ID: \(update.reducerCall.requestId)")
                 debugLog(">>>   Status: \(update.eventStatusDescription)")
 
-                // Notify delegate about reducer response
-                var errorMessage: String? = nil
-                if case .failed(let message) = update.status {
-                    errorMessage = message
-                }
-
+                // Notify delegate about reducer response (typed form;
+                // default impl bridges to the legacy string-status method).
                 await clientDelegate?.onReducerResponse(
                     client: self,
-                    reducer: update.reducerName,
                     requestId: update.reducerCall.requestId,
-                    status: update.eventStatusDescription,
-                    message: errorMessage,
-                    energyUsed: update.energyQuantaUsed.used
+                    reducerName: update.reducerName,
+                    status: update.status.reducerStatus,
+                    energy: update.energyQuantaUsed
                 )
+                self.emit(reducer: ReducerEvent(
+                    requestId: update.reducerCall.requestId,
+                    reducerName: update.reducerName,
+                    status: update.status.reducerStatus,
+                    energy: update.energyQuantaUsed
+                ))
 
                 // Name changes will be detected and displayed by the delegate
                 // when it compares the cached names with the new data
@@ -394,9 +410,7 @@ extension SpacetimeDBClient {
                                     }
                                     do {
                                         let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                        let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
-                                        guard case .product(let values) = modelValue else { continue }
-                                        let typedRow = try decoder.decode(modelValues: values)
+                                        let typedRow = try decoder.decode(reader: reader)
                                         allDeletedRows.append(typedRow)
                                     } catch {
                                         debugLog(">>>     Error decoding deleted row: \(error)")
@@ -420,9 +434,7 @@ extension SpacetimeDBClient {
                                     }
                                     do {
                                         let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                        let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
-                                        guard case .product(let values) = modelValue else { continue }
-                                        let typedRow = try decoder.decode(modelValues: values)
+                                        let typedRow = try decoder.decode(reader: reader)
                                         allInsertedRows.append(typedRow)
                                         if !isOwnUpdate {
                                             debugLog(">>>     📢 New row from OTHER USER: \(typedRow)")
@@ -445,6 +457,11 @@ extension SpacetimeDBClient {
                     // Always call the delegate if we have any rows (even if just raw data)
                     if !allDeletedRows.isEmpty || !allInsertedRows.isEmpty {
                         debugLog(">>>   Calling onTableUpdate for '\(tableUpdate.name)': \(allDeletedRows.count) deletes, \(allInsertedRows.count) inserts")
+                        self.emit(tableEvent: TableEvent(
+                            tableName: tableUpdate.name,
+                            deletes: allDeletedRows,
+                            inserts: allInsertedRows
+                        ))
                         await clientDelegate?.onTableUpdate(
                             client: self,
                             table: tableUpdate.name,
@@ -459,7 +476,7 @@ extension SpacetimeDBClient {
                 // Read OneOffQueryResponse
                 let response = try OneOffQueryResponse(reader: reader)
                 debugLog(">>> OneOffQueryResponse received for messageId: \(response.messageId.map { String(format: "%02X", $0) }.joined())")
-                
+
                 if let error = response.error {
                     debugLog(">>> Query error: \(error)")
                 } else {
@@ -468,20 +485,24 @@ extension SpacetimeDBClient {
                         debugLog(">>>   Table: \(table.name) with \(table.rows.count) rows")
                     }
                 }
-                
+
                 handleOneOffQueryResponse(response)
             } else if messageTag == Tags.ServerMessage.unsubscribeApplied.rawValue {
                 // Read UnsubscribeAppliedMessage (single unsubscribe)
                 let unsubscribeApplied = try UnsubscribeAppliedMessage(reader: reader)
                 debugLog(">>> UnsubscribeApplied received for queryId: \(unsubscribeApplied.queryId)")
-                
+
                 await clientDelegate?.onUnsubscribeApplied(client: self, queryId: unsubscribeApplied.queryId)
+                self.emit(subscription: .unsubscribed(queryId: unsubscribeApplied.queryId, multi: false))
+                self.resolveSubscriptionUnsubscribed(queryId: unsubscribeApplied.queryId)
             } else if messageTag == Tags.ServerMessage.unsubscribeMultiApplied.rawValue {
                 // Read UnsubscribeMultiAppliedMessage
                 let unsubscribeMultiApplied = try UnsubscribeMultiAppliedMessage(reader: reader)
                 debugLog(">>> UnsubscribeMultiApplied received for queryId: \(unsubscribeMultiApplied.queryId)")
 
                 await clientDelegate?.onUnsubscribeApplied(client: self, queryId: unsubscribeMultiApplied.queryId)
+                self.emit(subscription: .unsubscribed(queryId: unsubscribeMultiApplied.queryId, multi: true))
+                self.resolveSubscriptionUnsubscribed(queryId: unsubscribeMultiApplied.queryId)
             } else if messageTag == Tags.ServerMessage.subscriptionError.rawValue {
                 let subscriptionError = try SubscriptionErrorMessage(reader: reader)
                 await clientDelegate?.onSubscriptionError(
@@ -490,6 +511,12 @@ extension SpacetimeDBClient {
                     tableId: subscriptionError.tableId,
                     error: subscriptionError.error
                 )
+                self.emit(subscription: .error(
+                    queryId: subscriptionError.queryId,
+                    tableId: subscriptionError.tableId,
+                    message: subscriptionError.error
+                ))
+                self.failSubscriptionFutures(queryId: subscriptionError.queryId, message: subscriptionError.error)
             } else if messageTag == Tags.ServerMessage.transactionUpdateLight.rawValue {
                 let transactionUpdateLight = try TransactionUpdateLightMessage(reader: reader)
                 await processDatabaseUpdate(transactionUpdateLight.update)
@@ -516,17 +543,18 @@ extension SpacetimeDBClient {
                 var insertedRows: [Any] = []
                 for row in queryUpdate.inserts.rows where !row.isEmpty {
                     let rowReader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                    let modelValue = try rowReader.readAlgebraicValue(as: .product(decoder.model))
-                    guard case .product(let values) = modelValue else { continue }
-                    insertedRows.append(try decoder.decode(modelValues: values))
+                    insertedRows.append(try decoder.decode(reader: rowReader))
                 }
                 var deletedRows: [Any] = []
                 for row in queryUpdate.deletes.rows where !row.isEmpty {
                     let rowReader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                    let modelValue = try rowReader.readAlgebraicValue(as: .product(decoder.model))
-                    guard case .product(let values) = modelValue else { continue }
-                    deletedRows.append(try decoder.decode(modelValues: values))
+                    deletedRows.append(try decoder.decode(reader: rowReader))
                 }
+                self.emit(tableEvent: TableEvent(
+                    tableName: tableUpdate.name,
+                    deletes: deletedRows,
+                    inserts: insertedRows
+                ))
                 await clientDelegate?.onTableUpdate(
                     client: self,
                     table: tableUpdate.name,

@@ -21,6 +21,9 @@ build/
 # Optional: macOS system files
 .DS_Store
 
+# Claude Code per-developer settings
+.claude/
+
 ## Obj-C/Swift specific
 *.hmap
 

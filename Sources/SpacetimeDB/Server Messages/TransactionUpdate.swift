@@ -45,7 +45,7 @@ public struct TransactionUpdate {
     }
 
 
-    public struct EnergyQuanta {
+    public struct EnergyQuanta: Sendable, Equatable {
         public let budget: UInt128
         public let used: UInt128
 

@@ -25,11 +25,20 @@ public protocol SpacetimeDBClientDelegate: AnyObject, Sendable {
     // Called when the SDK receives a response after reducer execution
     // The status indicates whether the reducer was committed, failed, or ran out of energy
     // energyUsed is the amount of energy consumed by the reducer execution
+    //
+    // Legacy string-status form. New code should override
+    // `onReducerResponse(client:requestId:reducerName:status:energy:)` instead;
+    // the SDK calls the typed form, whose default implementation bridges back
+    // to this method for backward compatibility.
     func onReducerResponse(client: SpacetimeDBClient, reducer: String, requestId: UInt32, status: String, message: String?, energyUsed: UInt128) async
-    
+
+    // Typed reducer-response callback. Status is `ReducerStatus.committed`,
+    // `.failed(String)`, or `.outOfEnergy`; energy carries both budget and used.
+    func onReducerResponse(client: SpacetimeDBClient, requestId: UInt32, reducerName: String, status: ReducerStatus, energy: TransactionUpdate.EnergyQuanta) async
+
     // Called when a one-off query response is received
     func onOneOffQueryResponse(client: SpacetimeDBClient, result: OneOffQueryResult) async
-    
+
     // Called when an unsubscribe request is confirmed
     func onUnsubscribeApplied(client: SpacetimeDBClient, queryId: UInt32) async
 
@@ -62,5 +71,32 @@ public extension SpacetimeDBClientDelegate {
 
     func onTransactionUpdateLight(client: SpacetimeDBClient, requestId: UInt32) async {
         // Default empty implementation
+    }
+
+    // Typed callback default — bridges to the legacy string-status form so
+    // existing delegates that only override the legacy method continue to
+    // receive reducer responses unchanged.
+    func onReducerResponse(client: SpacetimeDBClient, requestId: UInt32, reducerName: String, status: ReducerStatus, energy: TransactionUpdate.EnergyQuanta) async {
+        let legacyStatus: String
+        let message: String?
+        switch status {
+        case .committed:
+            legacyStatus = "committed"
+            message = nil
+        case .failed(let msg):
+            legacyStatus = "failed: \(msg)"
+            message = msg
+        case .outOfEnergy:
+            legacyStatus = "out of energy"
+            message = nil
+        }
+        await onReducerResponse(
+            client: client,
+            reducer: reducerName,
+            requestId: requestId,
+            status: legacyStatus,
+            message: message,
+            energyUsed: energy.used
+        )
     }
 }

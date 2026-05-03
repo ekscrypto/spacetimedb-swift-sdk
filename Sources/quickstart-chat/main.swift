@@ -98,9 +98,9 @@ struct QuickstartChat {
                 host: config.host,
                 db: config.db
             )
-            
-            // Register the UserRowDecoder before connecting
-            await client.registerTableRowDecoder(table: "user", decoder: UserRowDecoder())
+
+            // Register row decoders before connecting (BSATNRow path).
+            await client.registerTableRowDecoder(UserRow.self)
 
             // Token precedence: env override > saved > anonymous
             let token = config.token ?? TokenStorage.load()
@@ -115,47 +115,47 @@ struct QuickstartChat {
             // Connect with delegate that signals when connection is ready
             let delegate = OneOffQueryDelegate()
             try await client.connect(token: token, delegate: delegate)
-            
+
             // Wait for connection and identity to be fully established
             await delegate.waitForConnection()
-            
-            // Execute one-off query to get all users with longer timeout  
+
+            // Execute one-off query to get all users with longer timeout
             print("📤 Sending OneOffQuery...")
             let result = try await client.oneOffQuery("SELECT * FROM user", timeout: 30.0)
-            
+
             if let error = result.error {
                 print("❌ Query error: \(error)")
                 exit(1)
             }
-            
+
             print("✅ Query executed successfully in \(result.executionDuration) microseconds")
-            
+
             // Check if user table exists in results
             guard result.tables.contains(where: { $0.name == "user" }) else {
                 print("📊 No user table found in results")
                 await client.disconnect()
                 return
             }
-            
+
             // Decode user rows using the client's registered decoder (same as normal table updates)
             let users: [UserRow] = await result.decodeRows(from: "user", using: client)
-            
+
             if users.isEmpty {
                 print("📊 No users found in database")
             } else {
                 print("\n👥 Users found (\(users.count)):")
-                
+
                 for user in users {
                     let displayName = user.name ?? "<unnamed>"
                     let onlineStatus = user.online ? "online" : "offline"
                     let fullIdentity = user.identity.description
-                    
+
                     print("\(fullIdentity) \(displayName) \(onlineStatus)")
                 }
             }
-            
+
             await client.disconnect()
-            
+
         } catch {
             print("❌ Failed to fetch users: \(error)")
             exit(1)
@@ -334,8 +334,8 @@ struct QuickstartChat {
                 host: config.host,
                 db: config.db
             )
-            await client.registerTableRowDecoder(table: "user", decoder: UserRowDecoder())
-            await client.registerTableRowDecoder(table: "message", decoder: MessageRowDecoder())
+            await client.registerTableRowDecoder(UserRow.self)
+            await client.registerTableRowDecoder(MessageRow.self)
 
             print("Attempting to connect...")
             try await client.connect(token: token, delegate: delegate)

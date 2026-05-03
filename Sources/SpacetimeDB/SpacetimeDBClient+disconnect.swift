@@ -26,5 +26,7 @@ extension SpacetimeDBClient {
         if let delegate = clientDelegate {
             await delegate.onDisconnect(client: self)
         }
+        self.emit(connection: .disconnected(reason: nil))
+        self.failAllSubscriptionFutures(reason: "disconnected")
     }
 }

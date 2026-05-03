@@ -25,6 +25,16 @@ public enum UpdateStatus {
         }
     }
 
+    /// Drop the committed `DatabaseUpdate` payload to expose just the
+    /// success/failure verdict. Suitable for the public reducer-response API.
+    public var reducerStatus: ReducerStatus {
+        switch self {
+        case .committed: return .committed
+        case .failed(let message): return .failed(message)
+        case .outOfEnergy: return .outOfEnergy
+        }
+    }
+
     init(reader: BSATNReader) throws {
         let tag: UInt8 = try reader.read()
         debugLog(">>>   UpdateStatus tag: \(tag)")

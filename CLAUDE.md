@@ -60,6 +60,11 @@ swift build
 3. **Use echo for automated testing**: `echo "/quit" | swift run quickstart-chat` to automatically exit after connection
 4. **Check connection success**: The client should show "✅ Connected to SpacetimeDB!" and receive user/message data
 5. **Verify with real operations**: Test actual commands like `/name TestUser`, `/sub`, `/unsub`, and sending messages to ensure protocol changes work
+6. **Maincloud target available**: The hosted db `quickstart-chat-55kji` on `wss://maincloud.spacetimedb.com` mirrors the tutorial schema (`user` PK `identity` + `message`). Run against it via:
+   ```bash
+   echo "/quit" | env SPACETIMEDB_HOST=https://maincloud.spacetimedb.com SPACETIMEDB_DB=quickstart-chat-55kji swift run quickstart-chat
+   ```
+   Connection-only is read-safe; reducer calls (`/name`, send-message) post to a shared module — get explicit user authorization before doing more than connect+subscribe.
 
 ### Compression Support
 

@@ -103,6 +103,19 @@ public actor SpacetimeDBClient {
     public var connected: Bool { _connected }
     internal var _connected: Bool = false
     internal var currentIdentity: UInt256?
+    internal var currentConnectionId: ConnectionId?
+
+    /// Server-assigned identity for this client. `nil` until the
+    /// `IdentityToken` message has been received post-connect.
+    public var identity: Identity? {
+        currentIdentity.map(Identity.init)
+    }
+
+    /// Per-WebSocket-session connection identifier. `nil` until the
+    /// `IdentityToken` message has been received post-connect.
+    public var connectionId: ConnectionId? {
+        currentConnectionId
+    }
 
     // Reconnection properties
     internal var shouldReconnect: Bool = false
@@ -131,9 +144,19 @@ public actor SpacetimeDBClient {
 
     // Table Row Decoders
     private var tableRowDecoders: [String: TableRowDecoder] = [:]
-    
+
     // OneOffQuery Management
     internal var pendingOneOffQueries: [Data: CheckedContinuation<OneOffQueryResult, Error>] = [:]
+
+    // Phase 3: AsyncStream continuation registries (one bucket per channel).
+    internal var connectionContinuations: [UUID: AsyncStream<ConnectionEvent>.Continuation] = [:]
+    internal var reducerContinuations: [UUID: AsyncStream<ReducerEvent>.Continuation] = [:]
+    internal var subscriptionContinuations: [UUID: AsyncStream<SubscriptionLifecycleEvent>.Continuation] = [:]
+    internal var tableContinuations: [String: [UUID: AsyncStream<TableEvent>.Continuation]] = [:]
+
+    // Phase 4: pending-future registries for SubscriptionHandle.applied()/unsubscribe().
+    internal var pendingAppliedContinuations: [UInt32: [CheckedContinuation<Void, Error>]] = [:]
+    internal var pendingUnsubscribeContinuations: [UInt32: [CheckedContinuation<Void, Error>]] = [:]
 
     public func registerTableRowDecoder(table: String, decoder: TableRowDecoder) {
         tableRowDecoders[table] = decoder
@@ -166,6 +189,7 @@ public actor SpacetimeDBClient {
 
                 // Notify delegate about reconnection attempt
                 await self.clientDelegate?.onReconnecting(client: self, attempt: attempt)
+                await self.emit(connection: .reconnecting(attempt: attempt))
 
                 // Calculate backoff delay (exponential with jitter)
                 let baseDelay = min(pow(2.0, Double(attempt - 1)), 30.0) // Cap at 30 seconds
@@ -209,6 +233,7 @@ public actor SpacetimeDBClient {
             if finalAttempts >= maxAttempts {
                 debugLog(">>> Max reconnection attempts reached")
                 await self.clientDelegate?.onError(client: self, error: Errors.disconnected)
+                await self.emit(connection: .error("Max reconnection attempts reached"))
             }
         }
     }
