@@ -66,3 +66,27 @@ public enum SubscriptionLifecycleEvent: Sendable, Equatable {
     case unsubscribed(queryId: UInt32, multi: Bool)
     case error(queryId: UInt32?, tableId: UInt32?, message: String)
 }
+
+/// Per-row event delivered on `SpacetimeDBClient.rowEvents(table:)`.
+/// When the table's row type conforms to `BSATNTableWithPrimaryKey`,
+/// delete+insert pairs sharing a PK within a single transaction are
+/// merged into `.updated(old:new:)` events; otherwise only `.inserted`
+/// and `.deleted` are emitted.
+///
+/// Marked `@unchecked Sendable` for the same reason as `TableEvent` —
+/// decoded rows are typically immutable value types.
+public enum RowEvent: @unchecked Sendable {
+    case inserted(Any)
+    case deleted(Any)
+    case updated(old: Any, new: Any)
+
+    public var tag: Tag {
+        switch self {
+        case .inserted: return .inserted
+        case .deleted:  return .deleted
+        case .updated:  return .updated
+        }
+    }
+
+    public enum Tag: Sendable, Equatable { case inserted, deleted, updated }
+}

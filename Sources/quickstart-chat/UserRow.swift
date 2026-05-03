@@ -7,12 +7,14 @@ import Foundation
 import BSATN
 import SpacetimeDB
 
-struct UserRow: BSATNRow {
+struct UserRow: BSATNTableWithPrimaryKey {
     static let tableName = "user"
 
     let identity: UInt256
     let name: String?
     let online: Bool
+
+    var primaryKey: UInt256 { identity }
 
     init(reader: BSATNReader) throws {
         self.identity = try reader.read()

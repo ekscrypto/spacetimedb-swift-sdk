@@ -250,7 +250,7 @@ extension SpacetimeDBClient {
                                 deletes: deletedRows,
                                 inserts: insertedRows
                             ))
-                            await clientDelegate?.onTableUpdate(
+                                        await clientDelegate?.onTableUpdate(
                                 client: self,
                                 table: tableUpdate.name,
                                 deletes: deletedRows,
@@ -318,7 +318,7 @@ extension SpacetimeDBClient {
                                 deletes: deletedRows,
                                 inserts: insertedRows
                             ))
-                            await clientDelegate?.onTableUpdate(
+                                        await clientDelegate?.onTableUpdate(
                                 client: self,
                                 table: tableUpdate.name,
                                 deletes: deletedRows,

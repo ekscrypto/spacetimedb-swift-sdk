@@ -17,9 +17,15 @@ let package = Package(
         .library(
             name: "BSATN",
             targets: ["BSATN"]),
+        .library(
+            name: "SpacetimeDBObservation",
+            targets: ["SpacetimeDBObservation"]),
         .executable(
             name: "quickstart-chat",
             targets: ["quickstart-chat"]),
+        .executable(
+            name: "spacetime-swift",
+            targets: ["spacetime-swift"]),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -29,12 +35,22 @@ let package = Package(
         .target(
             name: "SpacetimeDB",
             dependencies: ["BSATN"]),
+        .target(
+            name: "SpacetimeDBObservation",
+            dependencies: ["SpacetimeDB", "BSATN"]),
         .executableTarget(
             name: "quickstart-chat",
             dependencies: ["SpacetimeDB", "BSATN"],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"])
             ]),
+        .executableTarget(
+            name: "spacetime-swift"),
+        .testTarget(
+            name: "SpacetimeSwiftCodegenTests",
+            dependencies: ["spacetime-swift"],
+            resources: [.process("Fixtures")]
+        ),
         .testTarget(
             name: "SpacetimeDBTests",
             dependencies: ["SpacetimeDB"]
@@ -42,6 +58,10 @@ let package = Package(
         .testTarget(
             name: "BSATNTests",
             dependencies: ["BSATN"]
+        ),
+        .testTarget(
+            name: "SpacetimeDBObservationTests",
+            dependencies: ["SpacetimeDBObservation", "SpacetimeDB", "BSATN"]
         ),
     ]
 )

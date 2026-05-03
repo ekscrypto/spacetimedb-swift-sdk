@@ -71,6 +71,24 @@ public class BSATNWriter {
         }
     }
 
+    /// Generic typed array write — `[u32 count][element]*`. Used by codegen.
+    public func writeTypedArray<T>(_ array: [T], writeElement: (T) throws -> Void) throws {
+        write(UInt32(array.count))
+        for element in array {
+            try writeElement(element)
+        }
+    }
+
+    /// Write an optional value: tag 0=Some, tag 1=None.
+    public func writeOptional<T>(_ value: T?, writeValue: (T) throws -> Void) throws {
+        if let value {
+            write(UInt8(0))
+            try writeValue(value)
+        } else {
+            write(UInt8(1))
+        }
+    }
+
     /// Write a product value (concatenated field values)
     public func writeProduct(fieldValues: [AlgebraicValue], fieldWriters: [(AlgebraicValue) throws -> Void]) throws {
         guard fieldValues.count == fieldWriters.count else {

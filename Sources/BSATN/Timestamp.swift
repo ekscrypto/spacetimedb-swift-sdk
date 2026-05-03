@@ -82,34 +82,33 @@ extension Timestamp {
     /// RFC 3339 / ISO 8601 string with fractional-second precision suitable for
     /// round-tripping microsecond timestamps. Always emits UTC ("Z").
     public var rfc3339: String {
-        Timestamp.rfc3339Formatter.string(from: date)
+        Self.makeFormatter(withFractionalSeconds: true).string(from: date)
     }
 
     /// Parse an RFC 3339 / ISO 8601 timestamp. Accepts strings with or without
     /// fractional seconds.
     public init?(rfc3339: String) {
-        if let d = Timestamp.rfc3339Formatter.date(from: rfc3339) {
+        if let d = Self.makeFormatter(withFractionalSeconds: true).date(from: rfc3339) {
             self.init(date: d)
             return
         }
-        if let d = Timestamp.rfc3339FormatterNoFractional.date(from: rfc3339) {
+        if let d = Self.makeFormatter(withFractionalSeconds: false).date(from: rfc3339) {
             self.init(date: d)
             return
         }
         return nil
     }
 
-    // ISO8601DateFormatter is documented thread-safe (NSDateFormatter docs,
-    // iOS 10+/macOS 10.12+); silence Swift 6's strict-concurrency warning.
-    nonisolated(unsafe) private static let rfc3339Formatter: ISO8601DateFormatter = {
+    /// Construct a fresh `ISO8601DateFormatter` per call. Apple's docs claim
+    /// `ISO8601DateFormatter` is thread-safe, but on macOS 26.x the underlying
+    /// ICU `SimpleDateFormat` shows mutex contention that has corrupted
+    /// concurrently-running test threads in practice. Allocating per call is
+    /// microseconds-cheap and avoids the shared-state hazard entirely.
+    private static func makeFormatter(withFractionalSeconds: Bool) -> ISO8601DateFormatter {
         let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        f.formatOptions = withFractionalSeconds
+            ? [.withInternetDateTime, .withFractionalSeconds]
+            : [.withInternetDateTime]
         return f
-    }()
-
-    nonisolated(unsafe) private static let rfc3339FormatterNoFractional: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
+    }
 }

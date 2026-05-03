@@ -236,6 +236,17 @@ public class BSATNReader {
             throw BSATNError.unsupportedTag(tag)
         }
     }
+
+    /// Generic typed array read: `[u32 count][element]*`. Used by codegen.
+    public func readTypedArray<T>(readElement: () throws -> T) throws -> [T] {
+        let count: UInt32 = try read()
+        var result: [T] = []
+        result.reserveCapacity(Int(count))
+        for _ in 0..<count {
+            result.append(try readElement())
+        }
+        return result
+    }
 }
 
 /// Enum representing AlgebraicValue types for reading

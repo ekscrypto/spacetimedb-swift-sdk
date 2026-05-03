@@ -52,14 +52,27 @@ extension SpacetimeDBClient {
     }
 
     /// Per-table batched updates for the named table. Each `TableEvent`
-    /// carries decoded `deletes` and `inserts` arrays. Phase 6 will add a
-    /// strongly typed per-table stream with primary-key-based update
-    /// detection.
+    /// carries the full decoded `deletes` and `inserts` arrays for the
+    /// transaction (no PK matching). For per-row events with `.updated`
+    /// detection, see `rowEvents(table:)`.
     public nonisolated func tableEvents(named tableName: String) -> AsyncStream<TableEvent> {
         makeStream(register: { client, id, cont in
             await client.registerTableContinuation(id: id, tableName: tableName, continuation: cont)
         }, unregister: { client, id in
             await client.unregisterTableContinuation(id: id, tableName: tableName)
+        })
+    }
+
+    /// Per-row stream for the named table. When the table's registered
+    /// decoder conforms to `BSATNTableWithPrimaryKey`, delete+insert
+    /// pairs sharing a PK within a single transaction are merged into
+    /// `.updated(old:new:)` events. Tables without a PK only ever
+    /// receive `.inserted` and `.deleted`.
+    public nonisolated func rowEvents(table tableName: String) -> AsyncStream<RowEvent> {
+        makeStream(register: { client, id, cont in
+            await client.registerRowContinuation(id: id, tableName: tableName, continuation: cont)
+        }, unregister: { client, id in
+            await client.unregisterRowContinuation(id: id, tableName: tableName)
         })
     }
 
@@ -77,9 +90,70 @@ extension SpacetimeDBClient {
         for cont in subscriptionContinuations.values { cont.yield(event) }
     }
 
+    /// Fan out a `TableEvent` to:
+    ///   1. its own per-table batched stream (`tableEvents(named:)`), and
+    ///   2. the per-row stream (`rowEvents(table:)`), with PK-matched
+    ///      delete+insert pairs collapsed into `.updated(old:new:)` when
+    ///      the registered decoder provides a `primaryKeyExtractor`.
+    ///
+    /// Folding row-event emission inside the existing TableEvent emit
+    /// avoids introducing new actor-boundary transitions that would
+    /// re-trigger Swift 6's `sending` data-race warnings.
     internal func emit(tableEvent event: TableEvent) {
-        guard let bucket = tableContinuations[event.tableName] else { return }
-        for cont in bucket.values { cont.yield(event) }
+        if let bucket = tableContinuations[event.tableName] {
+            for cont in bucket.values { cont.yield(event) }
+        }
+        if let bucket = rowContinuations[event.tableName], !bucket.isEmpty {
+            let extractor = decoder(forTable: event.tableName)?.primaryKeyExtractor
+            let rowEvents: [RowEvent]
+            if let extractor {
+                rowEvents = Self.matchByPrimaryKey(deletes: event.deletes, inserts: event.inserts, extractor: extractor)
+            } else {
+                rowEvents = event.deletes.map { RowEvent.deleted($0) }
+                          + event.inserts.map { RowEvent.inserted($0) }
+            }
+            for re in rowEvents {
+                for cont in bucket.values { cont.yield(re) }
+            }
+        }
+    }
+
+    /// Pure helper — exposed `internal` for unit tests. Pairs deletes
+    /// with inserts by primary key, emitting `.updated` for matches and
+    /// `.deleted` / `.inserted` for the leftovers. Order: updates first,
+    /// then deletions, then insertions.
+    internal static func matchByPrimaryKey(
+        deletes: [Any],
+        inserts: [Any],
+        extractor: @Sendable (Any) -> AnyHashable?
+    ) -> [RowEvent] {
+        var pendingInserts: [AnyHashable: Any] = [:]
+        var orderedInsertKeys: [AnyHashable] = []
+        var unkeyedInserts: [Any] = []
+
+        for row in inserts {
+            if let key = extractor(row) {
+                if pendingInserts[key] == nil { orderedInsertKeys.append(key) }
+                pendingInserts[key] = row
+            } else {
+                unkeyedInserts.append(row)
+            }
+        }
+
+        var updates: [RowEvent] = []
+        var unmatchedDeletes: [Any] = []
+        for row in deletes {
+            if let key = extractor(row), let newRow = pendingInserts.removeValue(forKey: key) {
+                updates.append(.updated(old: row, new: newRow))
+            } else {
+                unmatchedDeletes.append(row)
+            }
+        }
+
+        let unmatchedInserts: [Any] = orderedInsertKeys.compactMap { pendingInserts[$0] } + unkeyedInserts
+        let deletions = unmatchedDeletes.map { RowEvent.deleted($0) }
+        let insertions = unmatchedInserts.map { RowEvent.inserted($0) }
+        return updates + deletions + insertions
     }
 
 
@@ -130,6 +204,21 @@ extension SpacetimeDBClient {
         tableContinuations[tableName]?.removeValue(forKey: id)
         if tableContinuations[tableName]?.isEmpty == true {
             tableContinuations.removeValue(forKey: tableName)
+        }
+    }
+
+    internal func registerRowContinuation(
+        id: UUID,
+        tableName: String,
+        continuation: AsyncStream<RowEvent>.Continuation
+    ) {
+        rowContinuations[tableName, default: [:]][id] = continuation
+    }
+
+    internal func unregisterRowContinuation(id: UUID, tableName: String) {
+        rowContinuations[tableName]?.removeValue(forKey: id)
+        if rowContinuations[tableName]?.isEmpty == true {
+            rowContinuations.removeValue(forKey: tableName)
         }
     }
 }

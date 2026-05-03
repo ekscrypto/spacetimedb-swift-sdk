@@ -1,0 +1,143 @@
+{
+  "database": "quickstart-chat-55kji",
+  "typespace": {
+    "types": [
+      {
+        "Product": {
+          "elements": [
+            {
+              "name": { "some": "sender" },
+              "algebraic_type": {
+                "Product": {
+                  "elements": [
+                    {
+                      "name": { "some": "__identity__" },
+                      "algebraic_type": { "U256": [] }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": { "some": "sent" },
+              "algebraic_type": {
+                "Product": {
+                  "elements": [
+                    {
+                      "name": { "some": "__timestamp_micros_since_unix_epoch__" },
+                      "algebraic_type": { "I64": [] }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": { "some": "text" },
+              "algebraic_type": { "String": [] }
+            }
+          ]
+        }
+      },
+      {
+        "Product": {
+          "elements": [
+            {
+              "name": { "some": "identity" },
+              "algebraic_type": {
+                "Product": {
+                  "elements": [
+                    {
+                      "name": { "some": "__identity__" },
+                      "algebraic_type": { "U256": [] }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": { "some": "name" },
+              "algebraic_type": {
+                "Sum": {
+                  "variants": [
+                    {
+                      "name": { "some": "some" },
+                      "algebraic_type": { "String": [] }
+                    },
+                    {
+                      "name": { "some": "none" },
+                      "algebraic_type": { "Product": { "elements": [] } }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": { "some": "online" },
+              "algebraic_type": { "Bool": [] }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "tables": [
+    {
+      "name": "message",
+      "product_type_ref": 0,
+      "primary_key": [],
+      "indexes": [],
+      "constraints": [],
+      "sequences": [],
+      "schedule": { "none": [] },
+      "table_type": { "User": [] },
+      "table_access": { "Public": [] }
+    },
+    {
+      "name": "user",
+      "product_type_ref": 1,
+      "primary_key": [0],
+      "indexes": [],
+      "constraints": [],
+      "sequences": [],
+      "schedule": { "none": [] },
+      "table_type": { "User": [] },
+      "table_access": { "Public": [] }
+    }
+  ],
+  "reducers": [
+    {
+      "name": "client_connected",
+      "params": { "elements": [] },
+      "lifecycle": { "some": { "OnConnect": [] } }
+    },
+    {
+      "name": "identity_disconnected",
+      "params": { "elements": [] },
+      "lifecycle": { "some": { "OnDisconnect": [] } }
+    },
+    {
+      "name": "send_message",
+      "params": {
+        "elements": [
+          {
+            "name": { "some": "text" },
+            "algebraic_type": { "String": [] }
+          }
+        ]
+      },
+      "lifecycle": { "none": [] }
+    },
+    {
+      "name": "set_name",
+      "params": {
+        "elements": [
+          {
+            "name": { "some": "name" },
+            "algebraic_type": { "String": [] }
+          }
+        ]
+      },
+      "lifecycle": { "none": [] }
+    }
+  ]
+}

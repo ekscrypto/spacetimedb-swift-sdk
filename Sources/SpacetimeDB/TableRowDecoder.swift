@@ -17,6 +17,11 @@ public protocol TableRowDecoder: Sendable {
   /// `decode(modelValues:)` — preserving existing behavior for legacy
   /// hand-rolled decoders. New row types can override this directly.
   func decode(reader: BSATNReader) throws -> Any
+
+  /// Optional primary-key extractor used by `client.rowEvents(table:)`
+  /// to fold delete+insert pairs into `.updated` events. Default `nil`
+  /// (no PK known → only `.inserted`/`.deleted` are emitted).
+  var primaryKeyExtractor: (@Sendable (Any) -> AnyHashable?)? { get }
 }
 
 public extension TableRowDecoder {
@@ -27,4 +32,6 @@ public extension TableRowDecoder {
         }
         return try decode(modelValues: values)
     }
+
+    var primaryKeyExtractor: (@Sendable (Any) -> AnyHashable?)? { nil }
 }

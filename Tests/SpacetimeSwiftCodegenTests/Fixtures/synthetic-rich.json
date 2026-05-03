@@ -1,0 +1,75 @@
+{
+  "database": "synthetic-rich",
+  "typespace": {
+    "types": [
+      {
+        "Product": {
+          "elements": [
+            { "name": { "some": "street" }, "algebraic_type": { "String": [] } },
+            { "name": { "some": "city" },   "algebraic_type": { "String": [] } }
+          ]
+        }
+      },
+      {
+        "Sum": {
+          "variants": [
+            { "name": { "some": "admin" },  "algebraic_type": { "Product": { "elements": [] } } },
+            { "name": { "some": "member" }, "algebraic_type": { "String": [] } },
+            { "name": { "some": "banned" }, "algebraic_type": { "U64": [] } }
+          ]
+        }
+      },
+      {
+        "Product": {
+          "elements": [
+            { "name": { "some": "id" },    "algebraic_type": { "U64": [] } },
+            { "name": { "some": "email" }, "algebraic_type": { "String": [] } },
+            { "name": { "some": "role" },  "algebraic_type": { "Ref": 1 } },
+            { "name": { "some": "tags" },  "algebraic_type": { "Array": { "String": [] } } },
+            { "name": { "some": "home" },  "algebraic_type": { "Ref": 0 } }
+          ]
+        }
+      }
+    ]
+  },
+  "tables": [
+    {
+      "name": "account",
+      "product_type_ref": 2,
+      "primary_key": [0],
+      "indexes": [],
+      "constraints": [],
+      "sequences": [],
+      "schedule": { "none": [] },
+      "table_type": { "User": [] },
+      "table_access": { "Public": [] }
+    }
+  ],
+  "reducers": [
+    {
+      "name": "add_tags",
+      "params": {
+        "elements": [
+          { "name": { "some": "id" },   "algebraic_type": { "U64": [] } },
+          { "name": { "some": "tags" }, "algebraic_type": { "Array": { "String": [] } } }
+        ]
+      },
+      "lifecycle": { "none": [] }
+    },
+    {
+      "name": "set_role",
+      "params": {
+        "elements": [
+          { "name": { "some": "id" },   "algebraic_type": { "U64": [] } },
+          { "name": { "some": "role" }, "algebraic_type": { "Ref": 1 } }
+        ]
+      },
+      "lifecycle": { "none": [] }
+    }
+  ],
+  "types": [
+    { "name": { "scope": [], "name": "Address" },  "ty": 0 },
+    { "name": { "scope": [], "name": "UserRole" }, "ty": 1 },
+    { "name": { "scope": [], "name": "Account" },  "ty": 2 }
+  ]
+}
