@@ -48,6 +48,13 @@ public extension Credentials {
 public extension Credentials {
     /// Save these credentials to the system Keychain. Replaces any
     /// previously-stored value for the same `(service, account)` pair.
+    ///
+    /// **Headless caveat**: on macOS, Keychain access from an unsigned
+    /// or non-app-bundle binary (e.g. `swift run`, command-line tests,
+    /// CI runners) may prompt for Touch ID / login password and *block
+    /// indefinitely* if no UI is available to respond. For headless
+    /// tooling, use the file-backed overloads below
+    /// (`save(to:)` / `load(from:)`) instead.
     func save(service: String = defaultService, account: String = defaultAccount) throws {
         let data = try JSONEncoder().encode(self)
         let query: [String: Any] = [
@@ -68,6 +75,10 @@ public extension Credentials {
 
     /// Load credentials from the system Keychain, or `nil` if no entry
     /// exists for the `(service, account)` pair.
+    ///
+    /// See the headless caveat on `save(service:account:)` — this call
+    /// can block on a Keychain authorization prompt when run outside a
+    /// signed app bundle. Headless tools should use `load(from:)`.
     static func load(service: String = defaultService, account: String = defaultAccount) throws -> Credentials? {
         let query: [String: Any] = [
             kSecClass as String:        kSecClassGenericPassword,

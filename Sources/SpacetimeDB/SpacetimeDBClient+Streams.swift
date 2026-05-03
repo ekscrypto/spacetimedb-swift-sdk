@@ -7,10 +7,18 @@
 //  receive loop, so application code may pick either or both.
 //
 //  Multi-subscriber model: each accessor returns a fresh `AsyncStream`
-//  whose continuation registers itself in a per-channel `[UUID: Cont]`
-//  dictionary on the actor. When the consuming `Task` cancels (or simply
-//  exits its `for await` loop), the stream's `onTermination` closure
-//  unregisters itself, so there is no leak.
+//  whose continuation is registered in a per-channel `[UUID: Cont]`
+//  dictionary on the actor at the moment the property is awaited
+//  (synchronously inside the `AsyncStream` builder). When the consuming
+//  `Task` cancels (or simply exits its `for await` loop), the stream's
+//  `onTermination` closure schedules unregistration on the actor, so
+//  there is no leak.
+//
+//  Note: accessors are actor-isolated (caller must `await`). Earlier
+//  iterations of this file used `nonisolated var` accessors that hopped
+//  to the actor via a fire-and-forget `Task` to register, which lost
+//  events fired between accessor return and the registration Task's
+//  first dispatch. The actor-isolated form eliminates that race.
 //
 
 import Foundation
@@ -22,45 +30,65 @@ extension SpacetimeDBClient {
     /// Connection-lifecycle events: `connected`, `reconnecting`,
     /// `disconnected`, `error`. Each subscriber gets its own stream;
     /// emissions fan out to all live subscribers.
-    public nonisolated var connectionEvents: AsyncStream<ConnectionEvent> {
-        makeStream(register: { client, id, cont in
-            await client.registerConnectionContinuation(id: id, continuation: cont)
-        }, unregister: { client, id in
-            await client.unregisterConnectionContinuation(id: id)
-        })
+    public var connectionEvents: AsyncStream<ConnectionEvent> {
+        AsyncStream { continuation in
+            let id = UUID()
+            self.connectionContinuations[id] = continuation
+            let weakSelf = WeakClient(self)
+            continuation.onTermination = { @Sendable [weakSelf] _ in
+                Task { [weakSelf] in
+                    await weakSelf.client?.unregisterConnectionContinuation(id: id)
+                }
+            }
+        }
     }
 
     /// Typed reducer-response events. Fires once per `TransactionUpdate`
     /// with the typed `ReducerStatus` and `EnergyQuanta`.
-    public nonisolated var reducerEvents: AsyncStream<ReducerEvent> {
-        makeStream(register: { client, id, cont in
-            await client.registerReducerContinuation(id: id, continuation: cont)
-        }, unregister: { client, id in
-            await client.unregisterReducerContinuation(id: id)
-        })
+    public var reducerEvents: AsyncStream<ReducerEvent> {
+        AsyncStream { continuation in
+            let id = UUID()
+            self.reducerContinuations[id] = continuation
+            let weakSelf = WeakClient(self)
+            continuation.onTermination = { @Sendable [weakSelf] _ in
+                Task { [weakSelf] in
+                    await weakSelf.client?.unregisterReducerContinuation(id: id)
+                }
+            }
+        }
     }
 
     /// Subscription-lifecycle events: applied, unsubscribed, error. Covers
     /// both single and multi subscriptions (distinguished by the `multi`
     /// flag on the `applied` / `unsubscribed` cases).
-    public nonisolated var subscriptionEvents: AsyncStream<SubscriptionLifecycleEvent> {
-        makeStream(register: { client, id, cont in
-            await client.registerSubscriptionContinuation(id: id, continuation: cont)
-        }, unregister: { client, id in
-            await client.unregisterSubscriptionContinuation(id: id)
-        })
+    public var subscriptionEvents: AsyncStream<SubscriptionLifecycleEvent> {
+        AsyncStream { continuation in
+            let id = UUID()
+            self.subscriptionContinuations[id] = continuation
+            let weakSelf = WeakClient(self)
+            continuation.onTermination = { @Sendable [weakSelf] _ in
+                Task { [weakSelf] in
+                    await weakSelf.client?.unregisterSubscriptionContinuation(id: id)
+                }
+            }
+        }
     }
 
     /// Per-table batched updates for the named table. Each `TableEvent`
     /// carries the full decoded `deletes` and `inserts` arrays for the
     /// transaction (no PK matching). For per-row events with `.updated`
     /// detection, see `rowEvents(table:)`.
-    public nonisolated func tableEvents(named tableName: String) -> AsyncStream<TableEvent> {
-        makeStream(register: { client, id, cont in
-            await client.registerTableContinuation(id: id, tableName: tableName, continuation: cont)
-        }, unregister: { client, id in
-            await client.unregisterTableContinuation(id: id, tableName: tableName)
-        })
+    public func tableEvents(named tableName: String) -> AsyncStream<TableEvent> {
+        AsyncStream { continuation in
+            let id = UUID()
+            self.tableContinuations[tableName, default: [:]][id] = continuation
+            let weakSelf = WeakClient(self)
+            continuation.onTermination = { @Sendable [weakSelf] _ in
+                Task { [weakSelf] in
+                    await weakSelf.client?.unregisterTableContinuation(id: id, tableName: tableName)
+                }
+            }
+        }
     }
 
     /// Per-row stream for the named table. When the table's registered
@@ -68,12 +96,17 @@ extension SpacetimeDBClient {
     /// pairs sharing a PK within a single transaction are merged into
     /// `.updated(old:new:)` events. Tables without a PK only ever
     /// receive `.inserted` and `.deleted`.
-    public nonisolated func rowEvents(table tableName: String) -> AsyncStream<RowEvent> {
-        makeStream(register: { client, id, cont in
-            await client.registerRowContinuation(id: id, tableName: tableName, continuation: cont)
-        }, unregister: { client, id in
-            await client.unregisterRowContinuation(id: id, tableName: tableName)
-        })
+    public func rowEvents(table tableName: String) -> AsyncStream<RowEvent> {
+        AsyncStream { continuation in
+            let id = UUID()
+            self.rowContinuations[tableName, default: [:]][id] = continuation
+            let weakSelf = WeakClient(self)
+            continuation.onTermination = { @Sendable [weakSelf] _ in
+                Task { [weakSelf] in
+                    await weakSelf.client?.unregisterRowContinuation(id: id, tableName: tableName)
+                }
+            }
+        }
     }
 
     // MARK: Internal emission (called from the receive loop)
@@ -157,47 +190,18 @@ extension SpacetimeDBClient {
     }
 
 
-    // MARK: Internal registration (actor-isolated)
-
-    internal func registerConnectionContinuation(
-        id: UUID,
-        continuation: AsyncStream<ConnectionEvent>.Continuation
-    ) {
-        connectionContinuations[id] = continuation
-    }
+    // MARK: Internal unregistration (actor-isolated; called by onTermination)
 
     internal func unregisterConnectionContinuation(id: UUID) {
         connectionContinuations.removeValue(forKey: id)
-    }
-
-    internal func registerReducerContinuation(
-        id: UUID,
-        continuation: AsyncStream<ReducerEvent>.Continuation
-    ) {
-        reducerContinuations[id] = continuation
     }
 
     internal func unregisterReducerContinuation(id: UUID) {
         reducerContinuations.removeValue(forKey: id)
     }
 
-    internal func registerSubscriptionContinuation(
-        id: UUID,
-        continuation: AsyncStream<SubscriptionLifecycleEvent>.Continuation
-    ) {
-        subscriptionContinuations[id] = continuation
-    }
-
     internal func unregisterSubscriptionContinuation(id: UUID) {
         subscriptionContinuations.removeValue(forKey: id)
-    }
-
-    internal func registerTableContinuation(
-        id: UUID,
-        tableName: String,
-        continuation: AsyncStream<TableEvent>.Continuation
-    ) {
-        tableContinuations[tableName, default: [:]][id] = continuation
     }
 
     internal func unregisterTableContinuation(id: UUID, tableName: String) {
@@ -207,42 +211,10 @@ extension SpacetimeDBClient {
         }
     }
 
-    internal func registerRowContinuation(
-        id: UUID,
-        tableName: String,
-        continuation: AsyncStream<RowEvent>.Continuation
-    ) {
-        rowContinuations[tableName, default: [:]][id] = continuation
-    }
-
     internal func unregisterRowContinuation(id: UUID, tableName: String) {
         rowContinuations[tableName]?.removeValue(forKey: id)
         if rowContinuations[tableName]?.isEmpty == true {
             rowContinuations.removeValue(forKey: tableName)
-        }
-    }
-}
-
-// MARK: Stream-builder helper
-
-extension SpacetimeDBClient {
-    private nonisolated func makeStream<Event: Sendable>(
-        register: @Sendable @escaping (SpacetimeDBClient, UUID, AsyncStream<Event>.Continuation) async -> Void,
-        unregister: @Sendable @escaping (SpacetimeDBClient, UUID) async -> Void
-    ) -> AsyncStream<Event> {
-        AsyncStream { continuation in
-            let id = UUID()
-            let weakSelf = WeakClient(self)
-            Task { [weakSelf] in
-                guard let client = weakSelf.client else { return }
-                await register(client, id, continuation)
-            }
-            continuation.onTermination = { @Sendable [weakSelf] _ in
-                Task { [weakSelf] in
-                    guard let client = weakSelf.client else { return }
-                    await unregister(client, id)
-                }
-            }
         }
     }
 }

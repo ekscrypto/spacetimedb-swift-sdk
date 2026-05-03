@@ -45,11 +45,17 @@ public struct SubscriptionHandle: Sendable {
     /// Per-handle filtered stream of subscription-lifecycle events
     /// (`.applied`, `.unsubscribed`, `.error`) for this subscription's
     /// `queryId` only. Each subscriber gets its own stream.
-    public var events: AsyncStream<SubscriptionLifecycleEvent> {
+    ///
+    /// `async` so the upstream `client.subscriptionEvents` continuation
+    /// registers synchronously inside the SDK actor *before* this method
+    /// returns — otherwise events emitted between accessor return and
+    /// the inner forwarding task starting would be lost.
+    public func events() async -> AsyncStream<SubscriptionLifecycleEvent> {
         let queryId = self.queryId
+        let upstream = await client.subscriptionEvents
         return AsyncStream { continuation in
-            let task = Task { [client] in
-                for await event in await client.subscriptionEvents {
+            let task = Task {
+                for await event in upstream {
                     switch event {
                     case .applied(let qid, _),
                          .unsubscribed(let qid, _):

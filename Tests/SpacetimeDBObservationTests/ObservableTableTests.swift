@@ -26,6 +26,11 @@ struct ObservableTableTests {
     // @Test macro disallows @available on its functions, so each test
     // gates at runtime via #available and delegates to an @available
     // helper.
+    //
+    // The post-emit sleeps below are to give the consumer Task a chance
+    // to *process* the emitted events into `rows`. Init no longer races
+    // (it awaits client.rowEvents synchronously), so emits cannot be
+    // dropped — but the consumer Task still needs CPU time to apply.
 
     @Test func insertEventsPopulateRows() async throws {
         guard #available(macOS 14, iOS 17, tvOS 17, watchOS 10, *) else { return }
@@ -36,14 +41,13 @@ struct ObservableTableTests {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
         await client.registerTableRowDecoder(TestRow.self)
         let table = await ObservableTable<TestRow>(client: client)
-        try await Task.sleep(nanoseconds: 80_000_000)
 
         await client.emit(tableEvent: TableEvent(
             tableName: "obs_test",
             deletes: [],
             inserts: [TestRow(id: 1, name: "alice"), TestRow(id: 2, name: "bob")]
         ))
-        try await Task.sleep(nanoseconds: 80_000_000)
+        try await Task.sleep(nanoseconds: 50_000_000)
 
         let snapshot = await table.rows
         #expect(snapshot[1] == TestRow(id: 1, name: "alice"))
@@ -60,14 +64,13 @@ struct ObservableTableTests {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
         await client.registerTableRowDecoder(TestRow.self)
         let table = await ObservableTable<TestRow>(client: client)
-        try await Task.sleep(nanoseconds: 80_000_000)
 
         await client.emit(tableEvent: TableEvent(
             tableName: "obs_test",
             deletes: [],
             inserts: [TestRow(id: 7, name: "old")]
         ))
-        try await Task.sleep(nanoseconds: 80_000_000)
+        try await Task.sleep(nanoseconds: 50_000_000)
 
         // PK-matched delete + insert → folded into .updated by Phase 6.
         await client.emit(tableEvent: TableEvent(
@@ -75,7 +78,7 @@ struct ObservableTableTests {
             deletes: [TestRow(id: 7, name: "old")],
             inserts: [TestRow(id: 7, name: "new")]
         ))
-        try await Task.sleep(nanoseconds: 80_000_000)
+        try await Task.sleep(nanoseconds: 50_000_000)
 
         let row = await table.rows[7]
         #expect(row == TestRow(id: 7, name: "new"))
@@ -92,21 +95,20 @@ struct ObservableTableTests {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
         await client.registerTableRowDecoder(TestRow.self)
         let table = await ObservableTable<TestRow>(client: client)
-        try await Task.sleep(nanoseconds: 80_000_000)
 
         await client.emit(tableEvent: TableEvent(
             tableName: "obs_test",
             deletes: [],
             inserts: [TestRow(id: 1, name: "a"), TestRow(id: 2, name: "b")]
         ))
-        try await Task.sleep(nanoseconds: 80_000_000)
+        try await Task.sleep(nanoseconds: 50_000_000)
 
         await client.emit(tableEvent: TableEvent(
             tableName: "obs_test",
             deletes: [TestRow(id: 1, name: "a")],
             inserts: []
         ))
-        try await Task.sleep(nanoseconds: 80_000_000)
+        try await Task.sleep(nanoseconds: 50_000_000)
 
         let snapshot = await table.rows
         #expect(snapshot[1] == nil)
@@ -122,14 +124,13 @@ struct ObservableTableTests {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
         await client.registerTableRowDecoder(TestRow.self)
         let table = await ObservableTable<TestRow>(client: client)
-        try await Task.sleep(nanoseconds: 80_000_000)
 
         await client.emit(tableEvent: TableEvent(
             tableName: "obs_test",
             deletes: [],
             inserts: [TestRow(id: 42, name: "answer")]
         ))
-        try await Task.sleep(nanoseconds: 80_000_000)
+        try await Task.sleep(nanoseconds: 50_000_000)
 
         let viaSubscript = await table[42]
         #expect(viaSubscript?.name == "answer")

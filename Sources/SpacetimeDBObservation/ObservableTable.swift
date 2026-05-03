@@ -55,9 +55,18 @@ public final class ObservableTable<Row: BSATNTableWithPrimaryKey> {
     /// `Sendable` and `.cancel()` is idempotent + thread-safe.
     @ObservationIgnored nonisolated(unsafe) private var consumerTask: Task<Void, Never>?
 
-    public init(client: SpacetimeDBClient) {
+    /// `async` so we can await `client.rowEvents(table:)` *before* the
+    /// init returns — guarantees the underlying continuation is
+    /// registered with the SDK actor before any emit can race past us.
+    public init(client: SpacetimeDBClient) async {
         self.client = client
-        startConsuming()
+        let stream = await client.rowEvents(table: Row.tableName)
+        consumerTask = Task { @MainActor [weak self] in
+            for await event in stream {
+                guard !Task.isCancelled, let self else { break }
+                self.apply(event)
+            }
+        }
     }
 
     deinit {
@@ -69,18 +78,6 @@ public final class ObservableTable<Row: BSATNTableWithPrimaryKey> {
     public var count: Int { rows.count }
     public var values: Dictionary<Row.PrimaryKey, Row>.Values { rows.values }
     public subscript(key: Row.PrimaryKey) -> Row? { rows[key] }
-
-    // MARK: Internals
-
-    private func startConsuming() {
-        let stream = client.rowEvents(table: Row.tableName)
-        consumerTask = Task { @MainActor [weak self] in
-            for await event in stream {
-                guard !Task.isCancelled, let self else { break }
-                self.apply(event)
-            }
-        }
-    }
 
     private func apply(_ event: RowEvent) {
         switch event {

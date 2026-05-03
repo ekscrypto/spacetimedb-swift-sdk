@@ -69,11 +69,16 @@ actor StreamsChat {
 
     // MARK: Stream consumers
 
+    // Stream accessors are now actor-isolated to eliminate the Phase-3
+    // continuation-registration race; each consumer awaits the accessor
+    // inside its Task so registration happens synchronously inside the
+    // SDK actor before the Task starts iterating.
+
     private func startConnectionConsumer() -> Task<Void, Never> {
-        let stream = client.connectionEvents
-        return Task { [weak self] in
+        Task { [weak self] in
+            guard let self else { return }
+            let stream = await self.client.connectionEvents
             for await event in stream {
-                guard let self else { break }
                 switch event {
                 case .connected(let identity, let connectionId, let token):
                     print("🆔 Identity: \(identity.abbreviated)…  conn=\(connectionId.abbreviated)")
@@ -91,28 +96,29 @@ actor StreamsChat {
     }
 
     private func startUserRowConsumer() -> Task<Void, Never> {
-        let stream = client.rowEvents(table: UserRow.tableName)
-        return Task { [weak self] in
+        Task { [weak self] in
+            guard let self else { return }
+            let stream = await self.client.rowEvents(table: UserRow.tableName)
             for await event in stream {
-                guard let self else { break }
                 await self.applyUserRowEvent(event)
             }
         }
     }
 
     private func startMessageRowConsumer() -> Task<Void, Never> {
-        let stream = client.rowEvents(table: MessageRow.tableName)
-        return Task { [weak self] in
+        Task { [weak self] in
+            guard let self else { return }
+            let stream = await self.client.rowEvents(table: MessageRow.tableName)
             for await event in stream {
-                guard let self else { break }
                 await self.applyMessageRowEvent(event)
             }
         }
     }
 
     private func startReducerConsumer() -> Task<Void, Never> {
-        let stream = client.reducerEvents
+        let client = self.client
         return Task {
+            let stream = await client.reducerEvents
             for await event in stream {
                 let verdict: String
                 switch event.status {

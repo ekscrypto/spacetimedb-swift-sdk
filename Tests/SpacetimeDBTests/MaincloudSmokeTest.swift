@@ -23,7 +23,7 @@ struct MaincloudSmokeTest {
     @Test(.enabled(if: MaincloudSmokeTest.enabled))
     func subscribeAppliedThenUnsubscribeRoundTrip() async throws {
         let client = try SpacetimeDBClient(host: Self.host, db: Self.db)
-        let connected = client.connectionEvents
+        let connected = await client.connectionEvents
 
         // Connect with a no-op delegate (delegate is still required by the
         // current connect() signature; Phase ≥10 will collapse it).

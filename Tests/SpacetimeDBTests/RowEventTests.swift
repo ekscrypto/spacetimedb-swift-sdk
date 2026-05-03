@@ -113,8 +113,7 @@ struct RowEventTests {
     @Test func rowEventStreamReceivesMatchedUpdate() async throws {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
         await client.registerTableRowDecoder(PKRow.self)
-        let stream = client.rowEvents(table: "pkrow")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        let stream = await client.rowEvents(table: "pkrow")
 
         let oldRow = PKRow(id: 7, payload: "old")
         let newRow = PKRow(id: 7, payload: "new")
@@ -133,8 +132,7 @@ struct RowEventTests {
     @Test func rowEventStreamWithoutPKEmitsDeleteAndInsert() async throws {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
         await client.registerTableRowDecoder(NoPKRow.self)
-        let stream = client.rowEvents(table: "nopk")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        let stream = await client.rowEvents(table: "nopk")
 
         await client.emit(tableEvent: TableEvent(
             tableName: "nopk",
@@ -160,8 +158,7 @@ struct RowEventTests {
     @Test func tableEventStreamUnchangedByPKMatching() async throws {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
         await client.registerTableRowDecoder(PKRow.self)
-        let stream = client.tableEvents(named: "pkrow")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        let stream = await client.tableEvents(named: "pkrow")
 
         await client.emit(tableEvent: TableEvent(
             tableName: "pkrow",

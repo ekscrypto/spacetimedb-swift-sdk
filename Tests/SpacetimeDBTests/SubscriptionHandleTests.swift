@@ -12,11 +12,11 @@ struct SubscriptionHandleTests {
         let handle = SubscriptionHandle(queryId: 42, isMulti: true, queries: ["SELECT * FROM x"], client: client)
 
         let waiter = Task { try await handle.applied() }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        // Yield once so the waiter Task gets a chance to register its
+        // pending-applied continuation before we resolve it.
+        try await Task.sleep(nanoseconds: 25_000_000)
 
-        // Simulate the receive loop firing the matching applied resolution.
         await client.resolveSubscriptionApplied(queryId: 42)
-
         try await waiter.value   // should not throw
     }
 
@@ -26,7 +26,7 @@ struct SubscriptionHandleTests {
         let handle = SubscriptionHandle(queryId: 7, isMulti: true, queries: [], client: client)
 
         let waiter = Task { try await handle.applied() }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await Task.sleep(nanoseconds: 25_000_000)
 
         await client.failSubscriptionFutures(queryId: 7, message: "boom")
 
@@ -35,13 +35,14 @@ struct SubscriptionHandleTests {
         }
     }
 
-    /// Handle's `events` stream filters to its own queryId.
+    /// Handle's `events` stream filters to its own queryId. No sleep
+    /// needed: `events()` is async so upstream registration completes
+    /// before any emit can race past it.
     @Test func eventsStreamFiltersByQueryId() async throws {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
         let handle = SubscriptionHandle(queryId: 100, isMulti: true, queries: [], client: client)
 
-        let stream = handle.events
-        try await Task.sleep(nanoseconds: 50_000_000)
+        let stream = await handle.events()
 
         await client.emit(subscription: .applied(queryId: 99, multi: true))     // foreign — filtered
         await client.emit(subscription: .applied(queryId: 100, multi: true))    // ours — pass
@@ -60,8 +61,7 @@ struct SubscriptionHandleTests {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
         let handle = SubscriptionHandle(queryId: 1, isMulti: true, queries: [], client: client)
 
-        let stream = handle.events
-        try await Task.sleep(nanoseconds: 50_000_000)
+        let stream = await handle.events()
 
         await client.emit(subscription: .error(queryId: nil, tableId: nil, message: "wide"))
 
