@@ -100,133 +100,18 @@ public struct TableUpdate: Sendable {
             debugLog(">>>   Update \(i): tag=\(tag)")
 
             if tag == 0 {
-                // Uncompressed: read QueryUpdate with BsatnRowList format
-                // Each BsatnRowList starts with a format marker
+                // Uncompressed: read QueryUpdate consisting of two BsatnRowLists
+                // (deletes, inserts). Wire format per the SpacetimeDB
+                // client-api spec (see crates/client-api-messages):
+                //
+                //   BsatnRowList = { size_hint: RowSizeHint, rows_data: [u8] }
+                //   RowSizeHint  = u8 tag
+                //                     0 -> FixedSize(u16)        // every row is N bytes
+                //                     1 -> RowOffsets([u64])     // u32 count + count * u64
+                //   rows_data    = u32 size + size bytes
+                let deleteRows = try Self.readBsatnRowList(label: "delete", reader: reader)
+                let insertRows = try Self.readBsatnRowList(label: "insert", reader: reader)
 
-                // Read deletes BsatnRowList
-                let deleteTag: UInt8 = try reader.read()
-                debugLog(">>>     Delete tag: \(deleteTag)")
-
-                var deleteRows: [Data] = []
-                if deleteTag == 1 {
-                    // BsatnRowList format
-                    let deleteOffsetCount: UInt32 = try reader.read()
-                    debugLog(">>>     Delete offset count: \(deleteOffsetCount)")
-
-                    // Read offset table
-                    var deleteOffsets: [UInt64] = []
-                    for _ in 0..<deleteOffsetCount {
-                        let offset: UInt64 = try reader.read()
-                        deleteOffsets.append(offset)
-                    }
-
-                    // Read data size
-                    let deleteDataSize: UInt32 = try reader.read()
-                    debugLog(">>>     Delete data size: \(deleteDataSize)")
-
-                    // Read the data blob and split by offsets
-                    if deleteDataSize > 0 && deleteOffsetCount > 0 {
-                        let dataBlobSlice = try reader.readBytes(Int(deleteDataSize))
-                        let dataBlob = Data(dataBlobSlice)
-
-                        // Offsets indicate the START position of each row in the data blob
-                        // Row i starts at deleteOffsets[i] and ends at deleteOffsets[i+1] (or end of blob for last row)
-                        for i in 0..<Int(deleteOffsetCount) {
-                            let startOffset = Int(deleteOffsets[i])
-                            let endOffset = (i + 1 < deleteOffsetCount) ? Int(deleteOffsets[i + 1]) : dataBlob.count
-
-                            // Make sure offsets are valid
-                            guard startOffset <= dataBlob.count && endOffset <= dataBlob.count && startOffset <= endOffset else {
-                                debugLog(">>>     Warning: Invalid offsets for delete row \(i): start=\(startOffset), end=\(endOffset), dataSize=\(dataBlob.count)")
-                                continue
-                            }
-
-                            let rowData = Data(dataBlob[startOffset..<endOffset])
-                            deleteRows.append(rowData)
-                            if rowData.count > 0 {
-                                debugLog(">>>     Delete row \(i): \(rowData.count) bytes")
-                            }
-                        }
-                    } else if deleteDataSize > 0 {
-                        // Single row with no offset table (entire data is one row)
-                        let dataBlobSlice = try reader.readBytes(Int(deleteDataSize))
-                        let dataBlob = Data(dataBlobSlice)
-                        deleteRows.append(dataBlob)
-                        debugLog(">>>     Single delete row: \(dataBlob.count) bytes")
-                    }
-                } else if deleteTag == 0 {
-                    // Empty list
-                    debugLog(">>>     Empty delete list")
-                } else {
-                    debugLog(">>>     Unknown delete format: \(deleteTag)")
-                }
-
-                // Read inserts BsatnRowList
-                let insertTag: UInt8 = try reader.read()
-                debugLog(">>>     Insert tag: \(insertTag)")
-
-                var insertRows: [Data] = []
-                if insertTag == 1 {
-                    // BsatnRowList format
-                    let insertOffsetCount: UInt32 = try reader.read()
-                    debugLog(">>>     Insert offset count: \(insertOffsetCount)")
-
-                    // Read offset table
-                    var insertOffsets: [UInt64] = []
-                    for _ in 0..<insertOffsetCount {
-                        let offset: UInt64 = try reader.read()
-                        insertOffsets.append(offset)
-                        if insertOffsets.count <= 5 {
-                            debugLog(">>>       Offset \(insertOffsets.count - 1): \(offset)")
-                        }
-                    }
-
-                    // Read data size
-                    let insertDataSize: UInt32 = try reader.read()
-                    debugLog(">>>     Insert data size: \(insertDataSize)")
-
-                    // Read the data blob and split by offsets
-                    if insertDataSize > 0 && insertOffsetCount > 0 {
-                        let dataBlobSlice = try reader.readBytes(Int(insertDataSize))
-                        let dataBlob = Data(dataBlobSlice)
-
-                        // Offsets indicate the START position of each row in the data blob
-                        // Row i starts at insertOffsets[i] and ends at insertOffsets[i+1] (or end of blob for last row)
-                        for i in 0..<Int(insertOffsetCount) {
-                            let startOffset = Int(insertOffsets[i])
-                            let endOffset = (i + 1 < insertOffsetCount) ? Int(insertOffsets[i + 1]) : dataBlob.count
-
-                            // Make sure offsets are valid
-                            guard startOffset <= dataBlob.count && endOffset <= dataBlob.count && startOffset <= endOffset else {
-                                debugLog(">>>     Warning: Invalid offsets for row \(i): start=\(startOffset), end=\(endOffset), dataSize=\(dataBlob.count)")
-                                continue
-                            }
-
-                            let rowData = Data(dataBlob[startOffset..<endOffset])
-                            insertRows.append(rowData)
-
-                            if i < 5 {  // Show first few rows
-                                let preview = rowData.prefix(min(50, rowData.count))
-                                let hex = preview.map { String(format: "%02X", $0) }.joined(separator: " ")
-                                debugLog(">>>     Insert row \(i): \(rowData.count) bytes - \(hex)")
-                            }
-                        }
-                    } else if insertDataSize > 0 {
-                        // Single row with no offset table (entire data is one row)
-                        let dataBlobSlice = try reader.readBytes(Int(insertDataSize))
-                        let dataBlob = Data(dataBlobSlice)
-                        insertRows.append(dataBlob)
-                        debugLog(">>>     Single insert row: \(dataBlob.count) bytes")
-                    }
-                } else if insertTag == 0 {
-                    // Empty list
-                    debugLog(">>>     Empty insert list")
-                } else {
-                    debugLog(">>>     Unknown insert format: \(insertTag)")
-                }
-
-
-                // Create QueryUpdate directly from the parsed BsatnRowLists
                 let queryUpdate = QueryUpdate(
                     deletes: BsatnRowList(rows: deleteRows),
                     inserts: BsatnRowList(rows: insertRows)
@@ -235,8 +120,6 @@ public struct TableUpdate: Sendable {
                 updates.append(update)
 
                 debugLog(">>>     Parsed uncompressed QueryUpdate: \(deleteRows.count) deletes, \(insertRows.count) inserts")
-
-                // Show first insert if available
                 if let firstInsert = insertRows.first, firstInsert.count > 0 {
                     let preview = firstInsert.prefix(min(100, firstInsert.count))
                     let hex = preview.map { String(format: "%02X", $0) }.joined(separator: " ")
@@ -271,5 +154,77 @@ public struct TableUpdate: Sendable {
             throw BSATNError.invalidStructure("No query updates in TableUpdate")
         }
         return try firstUpdate.getQueryUpdate()
+    }
+
+    /// Read a `BsatnRowList` per the official wire format:
+    ///
+    ///   size_hint: RowSizeHint = u8 tag + variant payload
+    ///                              0 -> FixedSize(u16)
+    ///                              1 -> RowOffsets(u32 count + [u64; count])
+    ///   rows_data: u32 length + [u8; length]
+    ///
+    /// Splits `rows_data` into per-row Data slices using the size hint.
+    internal static func readBsatnRowList(label: String, reader: BSATNReader) throws -> [Data] {
+        let hintTag: UInt8 = try reader.read()
+        debugLog(">>>     \(label) hint tag: \(hintTag)")
+
+        var fixedSize: UInt16 = 0
+        var offsets: [UInt64] = []
+        switch hintTag {
+        case 0:
+            // FixedSize(u16): every row in rows_data is this many bytes.
+            fixedSize = try reader.read()
+            debugLog(">>>     \(label) fixed row size: \(fixedSize)")
+        case 1:
+            // RowOffsets([u64]): explicit start offset of each row in rows_data.
+            let count: UInt32 = try reader.read()
+            debugLog(">>>     \(label) offset count: \(count)")
+            offsets.reserveCapacity(Int(count))
+            for _ in 0..<count {
+                let off: UInt64 = try reader.read()
+                offsets.append(off)
+            }
+        default:
+            throw BSATNError.unsupportedTag(hintTag)
+        }
+
+        let dataSize: UInt32 = try reader.read()
+        debugLog(">>>     \(label) data size: \(dataSize)")
+        let dataBlob = dataSize > 0 ? Data(try reader.readBytes(Int(dataSize))) : Data()
+
+        var rows: [Data] = []
+        if hintTag == 0 {
+            // FixedSize: split into chunks of `fixedSize` bytes.
+            // fixedSize == 0 with non-zero data means "1 row of N bytes" per
+            // SpacetimeDB convention; with zero data it means "no rows."
+            if fixedSize == 0 {
+                if dataBlob.isEmpty {
+                    return rows
+                }
+                rows.append(dataBlob)
+                return rows
+            }
+            let stride = Int(fixedSize)
+            var i = 0
+            while i + stride <= dataBlob.count {
+                rows.append(Data(dataBlob[i..<(i + stride)]))
+                i += stride
+            }
+            if i != dataBlob.count {
+                debugLog(">>>     warning: \(label) fixed-size leftover \(dataBlob.count - i) bytes")
+            }
+        } else {
+            // RowOffsets: each offset is the START of a row in dataBlob.
+            for (idx, start) in offsets.enumerated() {
+                let s = Int(start)
+                let e = (idx + 1 < offsets.count) ? Int(offsets[idx + 1]) : dataBlob.count
+                guard s <= e, e <= dataBlob.count else {
+                    debugLog(">>>     warning: invalid \(label) offsets [\(s)..\(e)] for size \(dataBlob.count)")
+                    continue
+                }
+                rows.append(Data(dataBlob[s..<e]))
+            }
+        }
+        return rows
     }
 }

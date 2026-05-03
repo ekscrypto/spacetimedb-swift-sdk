@@ -48,12 +48,10 @@ actor StreamsChat {
 
         try await client.connect(token: initialToken)
         await waitForConnected()
-        // NOTE: hand-rolled query order (user before message) avoids a
-        // pre-existing parser desync bug that fires when a 0-row table
-        // precedes a populated one in the SubscribeMultiApplied payload.
-        // `client.subscribeToAllTables()` would sort alphabetically and
-        // hit the bug. Tracked separately from Phase 10.
-        subscription = try await client.subscribe(["SELECT * FROM user", "SELECT * FROM message"])
+        // Phase-9-fix verified: BsatnRowList parser now correctly handles
+        // both FixedSize and RowOffsets size_hint variants. subscribeToAllTables
+        // (alphabetical [message, user]) now works against maincloud.
+        subscription = try await client.subscribeToAllTables()
         try await subscription?.applied()
         subscriptionReady = true
 

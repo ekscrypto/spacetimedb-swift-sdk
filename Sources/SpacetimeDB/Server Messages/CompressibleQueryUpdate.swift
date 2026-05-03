@@ -112,27 +112,13 @@ public enum CompressibleQueryUpdate: Sendable {
             let decompressed = try Self.decompressBrotli(data: compressedData)
             debugLog(">>> Decompressed to: \(decompressed.count) bytes")
 
-            // Parse the decompressed data as a QueryUpdate
+            // Parse the decompressed data as a QueryUpdate. readBsatnRowList
+            // now reads the size_hint tag itself — no manual tag pre-read.
             let reader = BSATNReader(data: decompressed, debugEnabled: DebugConfiguration.shared.isEnabled)
-
-            // Read deletes BsatnRowList
-            let deleteTag: UInt8 = try reader.read()
             var deleteRows: [Data] = []
-            if deleteTag == 1 {
-                // BsatnRowList format - read offsets and data
-                let deleteCount = try Self.readBsatnRowList(reader: reader, into: &deleteRows)
-                debugLog(">>>   Read \(deleteCount) delete rows")
-            }
-
-            // Read inserts BsatnRowList
-            let insertTag: UInt8 = try reader.read()
+            _ = try Self.readBsatnRowList(reader: reader, into: &deleteRows)
             var insertRows: [Data] = []
-            if insertTag == 1 {
-                // BsatnRowList format - read offsets and data
-                let insertCount = try Self.readBsatnRowList(reader: reader, into: &insertRows)
-                debugLog(">>>   Read \(insertCount) insert rows")
-            }
-
+            _ = try Self.readBsatnRowList(reader: reader, into: &insertRows)
             return QueryUpdate(
                 deletes: BsatnRowList(rows: deleteRows),
                 inserts: BsatnRowList(rows: insertRows)
@@ -142,19 +128,11 @@ public enum CompressibleQueryUpdate: Sendable {
             debugLog(">>> Decompressing gzip data: \(compressedData.count) bytes")
             let decompressed = try Self.decompressGzip(data: compressedData)
             debugLog(">>> Decompressed to: \(decompressed.count) bytes")
-
             let reader = BSATNReader(data: decompressed, debugEnabled: DebugConfiguration.shared.isEnabled)
-
-            let deleteTag: UInt8 = try reader.read()
             var deleteRows: [Data] = []
-            if deleteTag == 1 {
-                _ = try Self.readBsatnRowList(reader: reader, into: &deleteRows)
-            }
-            let insertTag: UInt8 = try reader.read()
+            _ = try Self.readBsatnRowList(reader: reader, into: &deleteRows)
             var insertRows: [Data] = []
-            if insertTag == 1 {
-                _ = try Self.readBsatnRowList(reader: reader, into: &insertRows)
-            }
+            _ = try Self.readBsatnRowList(reader: reader, into: &insertRows)
             return QueryUpdate(
                 deletes: BsatnRowList(rows: deleteRows),
                 inserts: BsatnRowList(rows: insertRows)
@@ -162,41 +140,58 @@ public enum CompressibleQueryUpdate: Sendable {
         }
     }
 
-    /// Helper to read BsatnRowList format
-    private static func readBsatnRowList(reader: BSATNReader, into rows: inout [Data]) throws -> Int {
-        let offsetCount: UInt32 = try reader.read()
-
-        // Read offset table
+    /// Helper to read BsatnRowList format. Pre-Phase-9-fix this only
+    /// handled the `RowOffsets` variant; callers used to read the leading
+    /// `tag = 1` byte themselves. The full SpacetimeDB wire format is:
+    ///
+    ///   BsatnRowList = { size_hint: RowSizeHint, rows_data: [u8] }
+    ///   RowSizeHint  = u8 tag
+    ///                     0 -> FixedSize(u16)
+    ///                     1 -> RowOffsets([u64] = u32 count + count*u64)
+    ///   rows_data    = u32 size + size bytes
+    ///
+    /// This implementation reads the size_hint tag itself and dispatches
+    /// to either the fixed-size or offsets-based row split.
+    static func readBsatnRowList(reader: BSATNReader, into rows: inout [Data]) throws -> Int {
+        let hintTag: UInt8 = try reader.read()
+        var fixedSize: UInt16 = 0
         var offsets: [UInt64] = []
-        for _ in 0..<offsetCount {
-            let offset: UInt64 = try reader.read()
-            offsets.append(offset)
+        switch hintTag {
+        case 0:
+            fixedSize = try reader.read()
+        case 1:
+            let count: UInt32 = try reader.read()
+            offsets.reserveCapacity(Int(count))
+            for _ in 0..<count {
+                let off: UInt64 = try reader.read()
+                offsets.append(off)
+            }
+        default:
+            throw BSATNError.unsupportedTag(hintTag)
         }
 
-        // Read data size
         let dataSize: UInt32 = try reader.read()
+        let dataBlob = dataSize > 0 ? Data(try reader.readBytes(Int(dataSize))) : Data()
 
-        // Read the data blob and split by offsets
-        if dataSize > 0 && offsetCount > 0 {
-            let dataBlobSlice = try reader.readBytes(Int(dataSize))
-            let dataBlob = Data(dataBlobSlice)
-
-            // Offsets indicate the START position of each row in the data blob
-            for i in 0..<Int(offsetCount) {
-                let startOffset = Int(offsets[i])
-                let endOffset = (i + 1 < offsetCount) ? Int(offsets[i + 1]) : dataBlob.count
-
-                // Make sure offsets are valid
-                guard startOffset <= dataBlob.count && endOffset <= dataBlob.count && startOffset <= endOffset else {
-                    debugLog(">>>   Warning: Invalid offsets for row \(i): start=\(startOffset), end=\(endOffset), dataSize=\(dataBlob.count)")
-                    continue
+        if hintTag == 0 {
+            if fixedSize == 0 {
+                if !dataBlob.isEmpty { rows.append(dataBlob) }
+            } else {
+                let stride = Int(fixedSize)
+                var i = 0
+                while i + stride <= dataBlob.count {
+                    rows.append(Data(dataBlob[i..<(i + stride)]))
+                    i += stride
                 }
-
-                let rowData = Data(dataBlob[startOffset..<endOffset])
-                rows.append(rowData)
+            }
+        } else {
+            for (idx, start) in offsets.enumerated() {
+                let s = Int(start)
+                let e = (idx + 1 < offsets.count) ? Int(offsets[idx + 1]) : dataBlob.count
+                guard s <= e, e <= dataBlob.count else { continue }
+                rows.append(Data(dataBlob[s..<e]))
             }
         }
-
-        return Int(offsetCount)
+        return rows.count
     }
 }

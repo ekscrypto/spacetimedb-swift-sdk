@@ -42,18 +42,24 @@ struct CompressibleQueryUpdateTests {
             inserts: BsatnRowList(rows: insertRows)
         )
 
-        // Create compressed data (simulate what server would send)
+        // Construct what a real server would send (post-fix, matching the
+        // SpacetimeDB BsatnRowList wire format):
+        //   BsatnRowList = { size_hint: u8 tag + variant payload, rows_data }
+        //   tag 0 = FixedSize(u16); tag 1 = RowOffsets(u32 count + count*u64)
+        //   rows_data = u32 size + size bytes
         let writer = BSATNWriter()
 
-        // Write deletes tag and data
-        writer.write(UInt8(0)) // No deletes
+        // Deletes: empty list expressed as FixedSize(0)/data=0
+        writer.write(UInt8(0))                  // hint tag = FixedSize
+        writer.write(UInt16(0))                 // fixed size = 0 (no rows)
+        writer.write(UInt32(0))                 // data size = 0
 
-        // Write inserts tag and data
-        writer.write(UInt8(1)) // Has inserts
-        writer.write(UInt32(2)) // offset count
-        writer.write(UInt64(0)) // offset 1
-        writer.write(UInt64(4)) // offset 2
-        writer.write(UInt32(8)) // data size
+        // Inserts: 2 rows of 4 bytes each via RowOffsets
+        writer.write(UInt8(1))                  // hint tag = RowOffsets
+        writer.write(UInt32(2))                 // offset count
+        writer.write(UInt64(0))                 // row 0 starts at offset 0
+        writer.write(UInt64(4))                 // row 1 starts at offset 4
+        writer.write(UInt32(8))                 // data size
         writer.write(Data([0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]))
 
         let uncompressedData = writer.finalize()
