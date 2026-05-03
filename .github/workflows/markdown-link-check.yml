@@ -1,0 +1,46 @@
+# Alternative link checker using markdown-link-check
+# This is a simpler alternative that focuses specifically on markdown files
+
+name: Markdown Link Check
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - '**.md'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - '**.md'
+  schedule:
+    # Run weekly on Sunday at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+jobs:
+  markdown-link-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Check links in markdown files
+      uses: gaurav-nelson/github-action-markdown-link-check@v1
+      with:
+        # Optional: specify which files to check
+        use-quiet-mode: 'no'
+        use-verbose-mode: 'yes'
+        check-modified-files-only: 'no'
+        base-branch: 'main'
+        max-depth: -1
+        
+        # Use config file for link checker settings
+        config-file: '.github/markdown-link-check-config.json'
+        
+        # Check all .md files
+        folder-path: '.'
+        file-extension: '.md'
+        
+        # Don't fail the build for broken links in scheduled runs
+        # This allows us to get notified without breaking CI
+        fail-on-error: ${{ github.event_name != 'schedule' }}
