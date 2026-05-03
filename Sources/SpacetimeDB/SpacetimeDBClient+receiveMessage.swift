@@ -36,12 +36,29 @@ extension SpacetimeDBClient {
 
     private func processOrForwardMessage(_ data: Data) async {
         await ClientMetrics.shared.recordReceived(db: dbName, byteCount: data.count)
-        if debugEnabled {
+        await clientDelegate?.onIncomingMessage(client: self, message: data)
+
+        // The hex dump is deferred until we know the message tag so
+        // we can suppress it for `initialConnection`, whose payload
+        // embeds a long-lived auth token. Anything we abort on
+        // before the tag is known still gets dumped via the defer.
+        var inspectedTag: UInt8? = nil
+        var dumpEmitted = false
+        let emitDump: () -> Void = { [data, debugEnabled] in
+            // No-op outside debug mode; otherwise prints the wire
+            // bytes verbatim, except for the initialConnection frame
+            // where the token would be readable in the ASCII column.
+            guard debugEnabled, !dumpEmitted else { return }
+            dumpEmitted = true
             print("=== Received BSATN Message (\(data.count) bytes) ===")
-            printHexData(data)
+            if inspectedTag == Tags.ServerMessage.initialConnection.rawValue {
+                print("[body suppressed — initialConnection contains an auth token]")
+            } else {
+                Self.printHexData(data)
+            }
             print("==============================")
         }
-        await clientDelegate?.onIncomingMessage(client: self, message: data)
+        defer { emitDump() }
 
         var reader = BSATNReader(data: data, debugEnabled: debugEnabled)
         let compressionTag: UInt8
@@ -78,6 +95,8 @@ extension SpacetimeDBClient {
             debugLog(">>> Error reading message tag: \(error)")
             return
         }
+        inspectedTag = messageTag
+        emitDump()
 
         do {
             switch messageTag {
@@ -308,7 +327,7 @@ extension SpacetimeDBClient {
 
     // MARK: - Hex dump
 
-    private func printHexData(_ data: Data) {
+    private static func printHexData(_ data: Data) {
         let bytes = Array(data)
         let bytesPerLine = 16
         let maxBytes = 16384

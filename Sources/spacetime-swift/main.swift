@@ -132,13 +132,25 @@ do {
     fail("invalid schema JSON: \(error)")
 }
 
+do {
+    try validateSchemaNames(doc)
+} catch {
+    fail("\(error)")
+}
+
 try? FileManager.default.createDirectory(at: outURL, withIntermediateDirectories: true)
 
 let emitter = SwiftEmitter(schema: doc)
 let files = emitter.emit()
 
+let outBase = outURL.standardizedFileURL.resolvingSymlinksInPath().path
 for (name, contents) in files.sorted(by: { $0.key < $1.key }) {
     let dest = outURL.appendingPathComponent(name)
+    let resolved = dest.standardizedFileURL.resolvingSymlinksInPath().path
+    let prefix = outBase.hasSuffix("/") ? outBase : outBase + "/"
+    guard resolved.hasPrefix(prefix) else {
+        fail("refusing to write '\(name)': resolves outside --out (\(resolved))")
+    }
     do {
         try contents.write(to: dest, atomically: true, encoding: .utf8)
         print("wrote \(dest.path)")

@@ -630,6 +630,98 @@ indirect enum SwiftKind {
     }
 }
 
+// MARK: Schema name validation
+
+/// Reasons why a schema name is unsafe to embed into emitted Swift
+/// source. SpacetimeDB itself enforces ASCII-identifier shape on
+/// table, reducer, type, column, and variant names, so legitimate
+/// schemas always pass; rejecting anything else closes the path
+/// traversal + Swift-source-injection vector that would otherwise
+/// let a malicious module owner write attacker-controlled `.swift`
+/// files anywhere the dev has write access.
+enum SchemaValidationError: Error, CustomStringConvertible {
+    case invalidName(kind: String, value: String)
+    case invalidDatabaseName(value: String)
+
+    var description: String {
+        switch self {
+        case .invalidName(let kind, let value):
+            return "schema \(kind) '\(value.prefix(64))' is not a valid ASCII identifier "
+                + "([A-Za-z_][A-Za-z0-9_]*); spacetime-swift refuses to emit it because "
+                + "doing so would allow path traversal or code injection in generated files."
+        case .invalidDatabaseName(let value):
+            return "schema database name '\(value.prefix(64))' contains characters outside "
+                + "[A-Za-z0-9._-]; spacetime-swift refuses to emit it because doing so would "
+                + "allow comment-break injection in generated files."
+        }
+    }
+}
+
+private func isAsciiIdentifier(_ s: String) -> Bool {
+    guard !s.isEmpty else { return false }
+    var first = true
+    for u in s.utf8 {
+        let isLetter = (u >= 0x41 && u <= 0x5A) || (u >= 0x61 && u <= 0x7A)
+        let isDigit = (u >= 0x30 && u <= 0x39)
+        let isUnderscore = u == 0x5F
+        if first {
+            if !(isLetter || isUnderscore) { return false }
+            first = false
+        } else {
+            if !(isLetter || isDigit || isUnderscore) { return false }
+        }
+    }
+    return true
+}
+
+private func isSafeDatabaseName(_ s: String) -> Bool {
+    guard !s.isEmpty else { return false }
+    for u in s.utf8 {
+        let isLetter = (u >= 0x41 && u <= 0x5A) || (u >= 0x61 && u <= 0x7A)
+        let isDigit = (u >= 0x30 && u <= 0x39)
+        let isAllowedPunct = u == 0x5F || u == 0x2D || u == 0x2E    // _ - .
+        if !(isLetter || isDigit || isAllowedPunct) { return false }
+    }
+    return true
+}
+
+func validateSchemaNames(_ schema: SchemaDoc) throws {
+    func require(_ value: String, kind: String) throws {
+        guard isAsciiIdentifier(value) else {
+            throw SchemaValidationError.invalidName(kind: kind, value: value)
+        }
+    }
+    if let db = schema.database, !db.isEmpty, !isSafeDatabaseName(db) {
+        throw SchemaValidationError.invalidDatabaseName(value: db)
+    }
+    for table in schema.tables {
+        try require(table.name, kind: "table name")
+    }
+    for reducer in schema.reducers {
+        try require(reducer.name, kind: "reducer name")
+        for el in reducer.params.elements {
+            if let n = el.name.value { try require(n, kind: "reducer parameter name") }
+        }
+    }
+    for nt in schema.types ?? [] {
+        try require(nt.name.name, kind: "type name")
+    }
+    for kind in schema.typespace.types {
+        switch kind {
+        case .product(let body):
+            for el in body.elements {
+                if let n = el.name.value { try require(n, kind: "product field name") }
+            }
+        case .sum(let body):
+            for v in body.variants {
+                if let n = v.name.value { try require(n, kind: "sum variant name") }
+            }
+        default:
+            break
+        }
+    }
+}
+
 // MARK: Naming helpers
 
 private let reservedKeywords: Set<String> = [
