@@ -5,18 +5,22 @@ import Testing
 @Suite("Compression Tests")
 struct CompressionTests {
 
-    @Test("Compression enum raw values")
+    @Test("Compression enum raw values match SpacetimeDB protocol bytes")
     func compressionEnumValues() {
+        // Per the SpacetimeDB wire protocol:
+        //   SERVER_MSG_COMPRESSION_TAG_NONE   = 0
+        //   SERVER_MSG_COMPRESSION_TAG_BROTLI = 1
+        //   SERVER_MSG_COMPRESSION_TAG_GZIP   = 2
         #expect(Compression.none.rawValue == 0)
-        #expect(Compression.gzip.rawValue == 1)
-        #expect(Compression.brotli.rawValue == 2)
+        #expect(Compression.brotli.rawValue == 1)
+        #expect(Compression.gzip.rawValue == 2)
     }
 
     @Test("Compression from raw value")
     func compressionFromRawValue() {
         #expect(Compression(rawValue: 0) == Compression.none)
-        #expect(Compression(rawValue: 1) == Compression.gzip)
-        #expect(Compression(rawValue: 2) == Compression.brotli)
+        #expect(Compression(rawValue: 1) == Compression.brotli)
+        #expect(Compression(rawValue: 2) == Compression.gzip)
         #expect(Compression(rawValue: 3) == nil)
     }
 

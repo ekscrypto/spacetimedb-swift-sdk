@@ -65,17 +65,17 @@ extension SpacetimeDBClient {
         }
 
         // Handle compression if needed
-        if compressionTag != Tags.Compression.none.rawValue {
+        if compressionTag != BSATN.Compression.none.rawValue {
             debugLog(">>> Compressed message detected (compression: \(compressionTag))")
 
             // The rest of the data is compressed
             let compressedData = reader.remainingData()
             var decompressedData: Data?
 
-            if compressionTag == Tags.Compression.brotli.rawValue {
+            if compressionTag == BSATN.Compression.brotli.rawValue {
                 debugLog(">>> Decompressing Brotli message: \(compressedData.count) bytes")
                 decompressedData = decompressBrotli(data: compressedData)
-            } else if compressionTag == Tags.Compression.gzip.rawValue {
+            } else if compressionTag == BSATN.Compression.gzip.rawValue {
                 debugLog(">>> Gzip compression is not currently supported")
                 return
             }

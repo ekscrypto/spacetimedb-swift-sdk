@@ -5,10 +5,10 @@
 //  Created by Dave Poirier on 2025-08-18.
 //
 
-public enum Compression: UInt8, CaseIterable {
+public enum Compression: UInt8, CaseIterable, Sendable {
     case none = 0
-    case gzip = 1
-    case brotli = 2
+    case brotli = 1
+    case gzip = 2
 
     // Legacy names for compatibility
     public static var uncompressed: Compression { .none }
