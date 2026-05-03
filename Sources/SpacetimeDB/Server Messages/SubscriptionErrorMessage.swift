@@ -2,29 +2,26 @@
 //  SubscriptionErrorMessage.swift
 //  spacetimedb-swift-sdk
 //
+//  v2 ServerMessage tag 0x03.
+//  Wire: request_id (Option<u32>) + query_set_id (u32) + error (string).
+//
+//  request_id is None when the failure occurred mid-subscription (during
+//  recompilation or incremental evaluation), Some when it's the response
+//  to a client-issued Subscribe.
+//
 
 import Foundation
 import BSATN
 
-/// Server message tag 0x07 — sent when a subscription lifecycle event fails.
-///
-/// `requestId` and `queryId` are absent when the error is the result of a
-/// transaction update rather than a client-issued Subscribe / Unsubscribe.
-/// `tableId`, when present, scopes the failure to that table only;
-/// when absent, the entire subscription is dropped.
 public struct SubscriptionErrorMessage: Sendable {
-    public let totalHostExecutionDurationMicros: UInt64
     public let requestId: UInt32?
-    public let queryId: UInt32?
-    public let tableId: UInt32?
+    public let querySetId: QuerySetId
     public let error: String
 
     init(reader: BSATNReader) throws {
-        totalHostExecutionDurationMicros = try reader.read()
-        requestId = try reader.readOptional { try reader.read() }
-        queryId = try reader.readOptional { try reader.read() }
-        tableId = try reader.readOptional { try reader.read() }
-        error = try reader.readString()
-        debugLog(">>> SubscriptionErrorMessage: queryId=\(queryId.map(String.init) ?? "nil"), tableId=\(tableId.map(String.init) ?? "nil"), error=\(error)")
+        self.requestId = try reader.readOptional { try reader.read() }
+        self.querySetId = try QuerySetId(reader: reader)
+        self.error = try reader.readString()
+        debugLog(">>> SubscriptionError: requestId=\(requestId.map(String.init) ?? "nil"), querySetId=\(querySetId.id), error=\(error)")
     }
 }

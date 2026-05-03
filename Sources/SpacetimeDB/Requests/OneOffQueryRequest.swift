@@ -2,38 +2,22 @@
 //  OneOffQueryRequest.swift
 //  spacetimedb-swift-sdk
 //
-//  Created by Dave Poirier on 2025-08-27.
+//  v2 OneOffQuery message — see crates/client-api-messages/src/websocket/v2.rs
+//  Wire: tag (u8=0x02) + request_id (u32) + query_string (string)
 //
 
 import Foundation
 import BSATN
 
 struct OneOffQueryRequest {
-    let messageId: Data
+    let requestId: UInt32
     let queryString: String
-
-    init(messageId: Data, queryString: String) {
-        self.messageId = messageId
-        self.queryString = queryString
-    }
 
     func encode() throws -> Data {
         let writer = BSATNWriter()
-        try writer.writeAlgebraicValue(.uint8(Tags.ClientMessage.oneOffQuery.rawValue))
-        
-        // Write message ID as array of bytes
-        try writer.writeAlgebraicValue(.uint32(UInt32(messageId.count)))
-        for byte in messageId {
-            try writer.writeAlgebraicValue(.uint8(byte))
-        }
-        
-        // Write query string as array of bytes
-        let encoded = queryString.data(using: .utf8)!
-        try writer.writeAlgebraicValue(.uint32(UInt32(encoded.count)))
-        for byte in encoded {
-            try writer.writeAlgebraicValue(.uint8(byte))
-        }
-        
+        writer.write(Tags.ClientMessage.oneOffQuery.rawValue)
+        writer.write(requestId)
+        try writer.write(queryString)
         return writer.finalize()
     }
 }

@@ -119,26 +119,27 @@ struct QuickstartChat {
             // Wait for connection and identity to be fully established
             await delegate.waitForConnection()
 
-            // Execute one-off query to get all users with longer timeout
+            // Execute one-off query to get all users with longer timeout.
+            // v2 returns rows directly; failures throw OneOffQueryError.
             print("📤 Sending OneOffQuery...")
-            let result = try await client.oneOffQuery("SELECT * FROM user", timeout: 30.0)
-
-            if let error = result.error {
-                print("❌ Query error: \(error)")
+            let rows: [SingleTableRows]
+            do {
+                rows = try await client.oneOffQuery("SELECT * FROM user", timeout: 30.0)
+            } catch let OneOffQueryError.serverError(message) {
+                print("❌ Query error: \(message)")
                 exit(1)
             }
 
-            print("✅ Query executed successfully in \(result.executionDuration) microseconds")
+            print("✅ Query executed successfully")
 
-            // Check if user table exists in results
-            guard result.tables.contains(where: { $0.name == "user" }) else {
+            guard rows.contains(where: { $0.tableName == "user" }) else {
                 print("📊 No user table found in results")
                 await client.disconnect()
                 return
             }
 
-            // Decode user rows using the client's registered decoder (same as normal table updates)
-            let users: [UserRow] = await result.decodeRows(from: "user", using: client)
+            // Decode user rows using the client's registered decoder.
+            let users: [UserRow] = await client.decodeRows(from: rows, table: "user")
 
             if users.isEmpty {
                 print("📊 No users found in database")
@@ -215,8 +216,8 @@ struct QuickstartChat {
                             print("📝 Setting name to: '\(name)'")
                             let reducer = SetNameReducer(userName: name)
                             do {
-                                let requestId = try await client.callReducer(reducer)
-                                print("   Request sent (ID: \(requestId))")
+                                _ = try await client.callReducer(reducer)
+                                print("   ✅ Name set")
                             } catch {
                                 print("   ❌ Failed to set name: \(error)")
                             }
@@ -229,12 +230,12 @@ struct QuickstartChat {
                         await showOnlineUsers(delegate: delegate)
 
                     case "/sub":
-                        if delegate.getActiveSubscription() != nil {
-                            print("⚠️ Already subscribed to queryId: \(delegate.getActiveSubscription()!)")
+                        if let active = delegate.getActiveSubscription() {
+                            print("⚠️ Already subscribed (queryId: \(active))")
                         } else {
                             do {
                                 let queryId = try await delegate.subscribe(client: client)
-                                print("📡 Subscribing with queryId: \(queryId)")
+                                print("📡 Subscribed (queryId: \(queryId))")
                             } catch {
                                 print("❌ Failed to subscribe: \(error)")
                             }
@@ -242,7 +243,7 @@ struct QuickstartChat {
 
                     case "/unsub":
                         do {
-                            try await delegate.unsubscribe(client: client)
+                            try await delegate.unsubscribe()
                         } catch {
                             print("❌ Failed to unsubscribe: \(error)")
                         }
@@ -315,11 +316,6 @@ struct QuickstartChat {
             return
         }
 
-        let useSingleSubs = args.contains("--single")
-        if useSingleSubs {
-            print("🔀 Using single subscriptions instead of multi-subscriptions\n")
-        }
-
         let noSubscribe = args.contains("--no-subscribe")
         if noSubscribe {
             print("🚫 Auto-subscription disabled - will not subscribe to any tables\n")
@@ -335,7 +331,7 @@ struct QuickstartChat {
             print("ℹ️ No token found - server will issue a new identity")
         }
 
-        let delegate = ChatClientDelegate(useSingleSubscriptions: useSingleSubs, autoSubscribe: !noSubscribe)
+        let delegate = ChatClientDelegate(autoSubscribe: !noSubscribe)
 
         do {
             // Register before connecting

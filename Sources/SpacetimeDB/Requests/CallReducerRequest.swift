@@ -2,59 +2,54 @@
 //  CallReducerRequest.swift
 //  spacetimedb-swift-sdk
 //
-//  Created by Dave Poirier on 2025-08-24.
+//  v2 CallReducer message — see crates/client-api-messages/src/websocket/v2.rs
+//  Wire: tag (u8=0x03) + request_id (u32) + flags (u8) + reducer (string) + args (bytes)
 //
 
 import Foundation
 import BSATN
 
-/// Request to call a reducer on the SpacetimeDB server
 public struct CallReducerRequest {
+    public let requestId: UInt32
+    public let flags: CallReducerFlags
     public let reducer: String
     public let arguments: Data
-    public let requestId: UInt32
-    public let flags: UInt8
 
-    public init(reducer: String, arguments: Data, requestId: UInt32 = UInt32.random(in: 1...UInt32.max), flags: UInt8 = 0) {
+    public init(
+        reducer: String,
+        arguments: Data,
+        requestId: UInt32 = UInt32.random(in: 1...UInt32.max),
+        flags: CallReducerFlags = .default
+    ) {
+        self.requestId = requestId
+        self.flags = flags
         self.reducer = reducer
         self.arguments = arguments
-        self.requestId = requestId
-        self.flags = flags
     }
 
-    public init(reducer: Reducer, requestId: UInt32 = UInt32.random(in: 1...UInt32.max), flags: UInt8 = 0) throws {
-        self.reducer = reducer.name
-
-        // Encode the arguments
+    public init(
+        reducer: Reducer,
+        requestId: UInt32 = UInt32.random(in: 1...UInt32.max),
+        flags: CallReducerFlags = .default
+    ) throws {
         let writer = BSATNWriter()
         try reducer.encodeArguments(writer: writer)
-        self.arguments = writer.finalize()
-
-        self.requestId = requestId
-        self.flags = flags
+        self.init(
+            reducer: reducer.name,
+            arguments: writer.finalize(),
+            requestId: requestId,
+            flags: flags
+        )
     }
 
-    /// Encode the CallReducer request to BSATN format
-    /// Field order from TypeScript SDK: reducer (string), args (array of u8), requestId (u32), flags (u8)
     public func encode() throws -> Data {
         let writer = BSATNWriter()
-
-        // Include message type tag like SubscribeMulti does
-        try writer.writeAlgebraicValue(.uint8(Tags.ClientMessage.callReducer.rawValue))
-
-        // 1. Reducer name as BSATN string
+        writer.write(Tags.ClientMessage.callReducer.rawValue)
+        writer.write(requestId)
+        flags.encode(to: writer)
         try writer.write(reducer)
-
-        // 2. Arguments as array of u8
         writer.write(UInt32(arguments.count))
         writer.writeBytes(arguments)
-
-        // 3. Request ID
-        writer.write(requestId)
-
-        // 4. Flags
-        writer.write(flags)
-
         return writer.finalize()
     }
 }

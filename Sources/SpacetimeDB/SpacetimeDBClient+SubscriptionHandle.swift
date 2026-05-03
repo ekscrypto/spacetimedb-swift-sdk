@@ -2,8 +2,8 @@
 //  SpacetimeDBClient+SubscriptionHandle.swift
 //  spacetimedb-swift-sdk
 //
-//  Phase 4: actor-side support for SubscriptionHandle —
-//   • `subscribe(_:)` / `subscribeSingle(_:)` create handles.
+//  Actor-side support for SubscriptionHandle:
+//   • `subscribe(_:)` creates a handle.
 //   • Pending-applied / pending-unsubscribe continuation registries
 //     are resolved by the receive loop.
 //
@@ -15,30 +15,18 @@ extension SpacetimeDBClient {
 
     // MARK: Public handle-returning subscribe API
 
-    /// Subscribe to one or more SQL queries using the multi-subscription
-    /// protocol. Returns immediately with a `SubscriptionHandle`; await
-    /// `handle.applied()` to know when the initial row data has landed.
+    /// Subscribe to one or more SQL queries. Returns immediately with a
+    /// `SubscriptionHandle`; await `handle.applied()` to know when the
+    /// initial row data has landed.
     public func subscribe(_ queries: [String]) async throws -> SubscriptionHandle {
         let queryId = self.nextQueryId
-        _ = try await subscribeMulti(queries: queries, queryId: queryId)
-        return SubscriptionHandle(queryId: queryId, isMulti: true, queries: queries, client: self)
-    }
-
-    /// Subscribe to one or more SQL queries using the single-subscription
-    /// protocol (legacy `Subscribe` message). Returns a `SubscriptionHandle`.
-    public func subscribeSingle(_ queries: [String]) async throws -> SubscriptionHandle {
-        let queryId = self.nextQueryId
-        _ = try await subscribe(queries: queries, requestId: queryId)
-        return SubscriptionHandle(queryId: queryId, isMulti: false, queries: queries, client: self)
+        try await sendSubscribe(queries: queries, queryId: queryId)
+        return SubscriptionHandle(queryId: queryId, queries: queries, client: self)
     }
 
     /// Convenience: emit `SELECT * FROM <table>` for every currently-
-    /// registered table-row decoder and subscribe to the lot via
-    /// `SubscribeMulti`. Returns a single `SubscriptionHandle`.
-    ///
-    /// Throws if no decoders are registered yet — register your row
-    /// types first (or use `subscribe([...])` directly with explicit
-    /// queries).
+    /// registered table-row decoder and subscribe to the lot. Returns
+    /// a single `SubscriptionHandle`.
     @discardableResult
     public func subscribeToAllTables() async throws -> SubscriptionHandle {
         let tables = registeredTableNames()
@@ -53,19 +41,14 @@ extension SpacetimeDBClient {
 
     // MARK: Pending-event registries
 
-    internal func awaitSubscriptionApplied(queryId: UInt32, multi: Bool) async throws {
+    internal func awaitSubscriptionApplied(queryId: UInt32) async throws {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             pendingAppliedContinuations[queryId, default: []].append(cont)
         }
     }
 
-    internal func unsubscribeAndAwait(queryId: UInt32, multi: Bool) async throws {
-        // Send the unsubscribe request, then wait for the matching applied event.
-        if multi {
-            try await unsubscribe(queryId: queryId)
-        } else {
-            _ = try await unsubscribeSingle(queryId: queryId)
-        }
+    internal func unsubscribeAndAwait(queryId: UInt32, includeDroppedRows: Bool) async throws {
+        try await sendUnsubscribe(queryId: queryId, includeDroppedRows: includeDroppedRows)
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             pendingUnsubscribeContinuations[queryId, default: []].append(cont)
         }
@@ -84,23 +67,11 @@ extension SpacetimeDBClient {
     }
 
     /// Fail any pending `applied()` or `unsubscribe()` futures whose
-    /// `queryId` matches (or all of them if `queryId` is `nil`, which is
-    /// what the server sends for connection-wide subscription errors).
-    internal func failSubscriptionFutures(queryId: UInt32?, message: String) {
+    /// `queryId` matches.
+    internal func failSubscriptionFutures(queryId: UInt32, message: String) {
         let error = SpacetimeDBError.invalidDefinition(message)
-        if let qid = queryId {
-            pendingAppliedContinuations.removeValue(forKey: qid)?.forEach { $0.resume(throwing: error) }
-            pendingUnsubscribeContinuations.removeValue(forKey: qid)?.forEach { $0.resume(throwing: error) }
-        } else {
-            for (_, conts) in pendingAppliedContinuations {
-                for cont in conts { cont.resume(throwing: error) }
-            }
-            pendingAppliedContinuations.removeAll()
-            for (_, conts) in pendingUnsubscribeContinuations {
-                for cont in conts { cont.resume(throwing: error) }
-            }
-            pendingUnsubscribeContinuations.removeAll()
-        }
+        pendingAppliedContinuations.removeValue(forKey: queryId)?.forEach { $0.resume(throwing: error) }
+        pendingUnsubscribeContinuations.removeValue(forKey: queryId)?.forEach { $0.resume(throwing: error) }
     }
 
     /// Fail every pending future on disconnect.
@@ -114,6 +85,23 @@ extension SpacetimeDBClient {
             for cont in conts { cont.resume(throwing: error) }
         }
         pendingUnsubscribeContinuations.removeAll()
-        _ = reason  // currently unused; kept for future logging
+
+        // Also fail in-flight reducer/procedure calls.
+        let callError = SpacetimeDBError.disconnected
+        for (_, pending) in pendingReducerCalls {
+            pending.continuation.resume(throwing: callError)
+        }
+        pendingReducerCalls.removeAll()
+        for (_, pending) in pendingProcedureCalls {
+            pending.continuation.resume(throwing: callError)
+        }
+        pendingProcedureCalls.removeAll()
+        // Drain pending one-off queries similarly.
+        for (_, cont) in pendingOneOffQueries {
+            cont.resume(throwing: callError)
+        }
+        pendingOneOffQueries.removeAll()
+
+        _ = reason
     }
 }

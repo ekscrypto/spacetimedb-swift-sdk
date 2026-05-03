@@ -2,19 +2,17 @@
 //  SubscriptionHandle.swift
 //  spacetimedb-swift-sdk
 //
-//  Phase 4: typed handle returned from `client.subscribe(...)`.
-//  Replaces the bare-`UInt32` queryId with an awaitable, cancellable
-//  object that exposes the subscription's lifecycle as async/await
-//  + an AsyncStream of per-handle events.
+//  Handle returned from `client.subscribe(...)` — wraps the underlying
+//  v2 query_set_id with awaitable / cancellable semantics plus a
+//  per-handle event stream.
 //
 
 import Foundation
 
 public struct SubscriptionHandle: Sendable {
+    /// Client-supplied opaque identifier for this subscription.
+    /// On the wire it travels as `QuerySetId{ id }`.
     public let queryId: UInt32
-    /// `true` if this handle was created via `subscribe(...)` (multi-query
-    /// protocol path); `false` for `subscribeSingle(...)`.
-    public let isMulti: Bool
 
     /// The queries this handle subscribes to. Stored on the client side
     /// only — the server identifies the subscription by `queryId`.
@@ -22,32 +20,23 @@ public struct SubscriptionHandle: Sendable {
 
     private let client: SpacetimeDBClient
 
-    internal init(
-        queryId: UInt32,
-        isMulti: Bool,
-        queries: [String],
-        client: SpacetimeDBClient
-    ) {
+    internal init(queryId: UInt32, queries: [String], client: SpacetimeDBClient) {
         self.queryId = queryId
-        self.isMulti = isMulti
         self.queries = queries
         self.client = client
     }
 
     /// Suspends until the server confirms the subscription with
-    /// `SubscribeApplied` / `SubscribeMultiApplied`, or throws if the
-    /// subscription fails. Calling more than once will throw on the
-    /// second call (one-shot semantics, like a future).
+    /// `SubscribeApplied`, or throws if it fails.
     public func applied() async throws {
-        try await client.awaitSubscriptionApplied(queryId: queryId, multi: isMulti)
+        try await client.awaitSubscriptionApplied(queryId: queryId)
     }
 
-    /// Per-handle filtered stream of subscription-lifecycle events
-    /// (`.applied`, `.unsubscribed`, `.error`) for this subscription's
-    /// `queryId` only. Each subscriber gets its own stream.
+    /// Per-handle filtered stream of subscription-lifecycle events for
+    /// this `queryId` only. Each subscriber gets its own stream.
     ///
     /// `async` so the upstream `client.subscriptionEvents` continuation
-    /// registers synchronously inside the SDK actor *before* this method
+    /// registers synchronously inside the actor before this method
     /// returns — otherwise events emitted between accessor return and
     /// the inner forwarding task starting would be lost.
     public func events() async -> AsyncStream<SubscriptionLifecycleEvent> {
@@ -57,11 +46,11 @@ public struct SubscriptionHandle: Sendable {
             let task = Task {
                 for await event in upstream {
                     switch event {
-                    case .applied(let qid, _),
-                         .unsubscribed(let qid, _):
+                    case .applied(let qid),
+                         .unsubscribed(let qid):
                         if qid == queryId { continuation.yield(event) }
                     case .error(let qid, _, _):
-                        if qid == nil || qid == queryId { continuation.yield(event) }
+                        if qid == queryId { continuation.yield(event) }
                     }
                 }
                 continuation.finish()
@@ -70,10 +59,10 @@ public struct SubscriptionHandle: Sendable {
         }
     }
 
-    /// Sends an `Unsubscribe` / `UnsubscribeMulti` request and suspends
-    /// until the server confirms. Throws if the connection drops or the
-    /// server reports an error against this `queryId`.
-    public func unsubscribe() async throws {
-        try await client.unsubscribeAndAwait(queryId: queryId, multi: isMulti)
+    /// Sends an `Unsubscribe` request and suspends until the server
+    /// confirms. Set `includeDroppedRows` to receive the rows being
+    /// removed from the client cache in the response.
+    public func unsubscribe(includeDroppedRows: Bool = false) async throws {
+        try await client.unsubscribeAndAwait(queryId: queryId, includeDroppedRows: includeDroppedRows)
     }
 }

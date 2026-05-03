@@ -2,33 +2,27 @@
 //  SubscribeRequest.swift
 //  spacetimedb-swift-sdk
 //
-//  Created by Dave Poirier on 2025-08-28.
+//  v2 Subscribe message — see crates/client-api-messages/src/websocket/v2.rs
+//  Wire: tag (u8=0x00) + request_id (u32) + query_set_id (u32) + query_strings ([]string)
 //
 
 import Foundation
 import BSATN
 
 struct SubscribeRequest {
-    let queries: [String]
     let requestId: UInt32
-
-    init(queries: [String], requestId: UInt32) {
-        self.queries = queries
-        self.requestId = requestId
-    }
+    let querySetId: QuerySetId
+    let queryStrings: [String]
 
     func encode() throws -> Data {
         let writer = BSATNWriter()
-        
-        // Write queries count and query strings (same as SubscribeMulti)
-        writer.write(UInt32(queries.count))
-        for query in queries {
+        writer.write(Tags.ClientMessage.subscribe.rawValue)
+        writer.write(requestId)
+        querySetId.encode(to: writer)
+        writer.write(UInt32(queryStrings.count))
+        for query in queryStrings {
             try writer.write(query)
         }
-        
-        // Write request ID
-        writer.write(requestId)
-        
         return writer.finalize()
     }
 }

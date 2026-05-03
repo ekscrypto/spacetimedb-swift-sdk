@@ -121,10 +121,11 @@ actor StreamsChat {
             let stream = await client.reducerEvents
             for await event in stream {
                 let verdict: String
-                switch event.status {
-                case .committed:        verdict = "✅"
-                case .failed(let m):    verdict = "❌ \(m)"
-                case .outOfEnergy:      verdict = "⚡ out of energy"
+                switch event.outcome {
+                case .ok:                verdict = "✅"
+                case .okEmpty:           verdict = "✅ (empty)"
+                case .error:             verdict = "❌ (typed error)"
+                case .internalError(let m): verdict = "❌ \(m)"
                 }
                 print("🔔 \(event.reducerName) [req=\(event.requestId)] \(verdict)")
             }

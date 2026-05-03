@@ -18,20 +18,20 @@ struct Phase9Tests {
             + "Trailer.".data(using: .utf8)!
 
         let gzipped = try gzipUsingShell(payload)
-        let decompressed = try CompressibleQueryUpdate.decompressGzip(data: gzipped)
+        let decompressed = try MessageDecompression.gzip(gzipped)
         #expect(decompressed == payload)
     }
 
     @Test func gzipRejectsBadMagic() {
         let bogus = Data(repeating: 0xff, count: 64)
         #expect(throws: BSATNError.self) {
-            _ = try CompressibleQueryUpdate.decompressGzip(data: bogus)
+            _ = try MessageDecompression.gzip(bogus)
         }
     }
 
     @Test func gzipRejectsTooShort() {
         #expect(throws: BSATNError.self) {
-            _ = try CompressibleQueryUpdate.decompressGzip(data: Data(repeating: 0, count: 4))
+            _ = try MessageDecompression.gzip(Data(repeating: 0, count: 4))
         }
     }
 
@@ -40,7 +40,7 @@ struct Phase9Tests {
     @Test func gzipStripsFNameHeader() throws {
         let payload = "abc".data(using: .utf8)!
         let gzipped = try gzipUsingShell(payload, withFilename: true)
-        let decompressed = try CompressibleQueryUpdate.decompressGzip(data: gzipped)
+        let decompressed = try MessageDecompression.gzip(gzipped)
         #expect(decompressed == payload)
     }
 

@@ -2,652 +2,332 @@
 //  SpacetimeDBClient+receiveMessage.swift
 //  spacetimedb-swift-sdk
 //
-//  Created by Dave Poirier on 2025-08-10.
+//  v2 ServerMessage dispatcher.
+//
+//  Wire framing per ServerMessage:
+//    [u8 compression_tag] [BSATN body]
+//      compression_tag: 0=None, 1=Brotli, 2=Gzip
+//
+//  After optional decompression the body begins with the ServerMessage
+//  variant tag (Tags.ServerMessage), followed by the variant payload.
 //
 
 import Foundation
 import BSATN
-import Compression
 
 extension SpacetimeDBClient {
     internal func receiveMessage() async throws {
-        guard let webSocketTask else {
-            return
-        }
+        guard let webSocketTask else { return }
 
-    receiveNextMessage:
         while !Task.isCancelled {
-            debugLog(">>> Waiting for WebSocket message...")
             let message = try await webSocketTask.receive()
-            debugLog(">>> WebSocket message received")
             switch message {
             case .data(let data):
-                debugLog(">>> Received binary data: \(data.count) bytes")
                 await processOrForwardMessage(data)
             case .string(let string):
-                debugLog(">>> Received string data: \(string.count) chars")
-                guard let data = string.data(using: .utf8) else {
-                    continue receiveNextMessage
+                if let data = string.data(using: .utf8) {
+                    await processOrForwardMessage(data)
                 }
-                await processOrForwardMessage(data)
             @unknown default:
-                debugLog(">>> Received unknown message type")
                 break
             }
         }
     }
 
     private func processOrForwardMessage(_ data: Data) async {
-        debugLog(">>> processOrForwardMessage called with \(data.count) bytes")
-
-        // Display hex representation of the data before processing
         if debugEnabled {
-            print("=== Received BSATN Message ===")
+            print("=== Received BSATN Message (\(data.count) bytes) ===")
             printHexData(data)
             print("==============================")
         }
-
-        // Notify delegate of incoming message FIRST, before any processing
         await clientDelegate?.onIncomingMessage(client: self, message: data)
 
-        // Process the BSATN message
-        debugLog(">>> Creating BSATNReader with \(data.count) bytes (first byte: 0x\(String(format: "%02X", data.first ?? 0)))")
         var reader = BSATNReader(data: data, debugEnabled: debugEnabled)
-
-        // Read compression tag
         let compressionTag: UInt8
         do {
             compressionTag = try reader.read()
-            debugLog(">>> Compression tag: \(compressionTag)")
         } catch {
             debugLog(">>> Error reading compression tag: \(error)")
             return
         }
 
-        // Handle compression if needed
         if compressionTag != BSATN.Compression.none.rawValue {
-            debugLog(">>> Compressed message detected (compression: \(compressionTag))")
-
-            // The rest of the data is compressed
-            let compressedData = reader.remainingData()
-            var decompressedData: Data?
-
-            if compressionTag == BSATN.Compression.brotli.rawValue {
-                debugLog(">>> Decompressing Brotli message: \(compressedData.count) bytes")
-                decompressedData = decompressBrotli(data: compressedData)
-            } else if compressionTag == BSATN.Compression.gzip.rawValue {
-                debugLog(">>> Decompressing gzip message: \(compressedData.count) bytes")
-                decompressedData = try? CompressibleQueryUpdate.decompressGzip(data: compressedData)
-            }
-
-            guard let decompressed = decompressedData else {
-                debugLog(">>> Failed to decompress message")
+            let compressedBody = reader.remainingData()
+            do {
+                let decompressed: Data
+                if compressionTag == BSATN.Compression.brotli.rawValue {
+                    decompressed = try MessageDecompression.brotli(compressedBody)
+                } else if compressionTag == BSATN.Compression.gzip.rawValue {
+                    decompressed = try MessageDecompression.gzip(compressedBody)
+                } else {
+                    debugLog(">>> Unknown compression tag: \(compressionTag)")
+                    return
+                }
+                reader = BSATNReader(data: decompressed, debugEnabled: debugEnabled)
+            } catch {
+                debugLog(">>> Decompression failed: \(error)")
                 return
             }
-
-            debugLog(">>> Decompressed to: \(decompressed.count) bytes")
-
-            // Create a new reader with the decompressed data
-            reader = BSATNReader(data: decompressed, debugEnabled: debugEnabled)
         }
 
-        // Read message type tag
-        let messageTag: UInt8 = (try? reader.read()) ?? 0
-        debugLog(">>> Message type: \(messageTag)")
+        let messageTag: UInt8
+        do {
+            messageTag = try reader.read()
+        } catch {
+            debugLog(">>> Error reading message tag: \(error)")
+            return
+        }
 
         do {
-            if messageTag == Tags.ServerMessage.initialSubscription.rawValue {
-                // Handle InitialSubscription (used for single subscriptions)
-                debugLog(">>> InitialSubscription message received")
-
-                // Parse InitialSubscription similar to SubscribeMultiApplied
-                // InitialSubscription contains the same DatabaseUpdate structure
-                do {
-                    let databaseUpdate = try DatabaseUpdate(reader: reader)
-                    debugLog(">>> InitialSubscription: tables=\(databaseUpdate.tableUpdates.count)")
-
-                    for tableUpdate in databaseUpdate.tableUpdates {
-                        debugLog(">>> Table: \(tableUpdate.name) (id: \(tableUpdate.id), rows: \(tableUpdate.numRows))")
-
-                        do {
-                            let queryUpdate = try tableUpdate.getQueryUpdate()
-                            debugLog(">>>   Deletes: \(queryUpdate.deletes.rows.count) rows")
-                            debugLog(">>>   Inserts: \(queryUpdate.inserts.rows.count) rows")
-
-                            let decoder = decoder(forTable: tableUpdate.name)
-                            if let decoder {
-                                // Process inserts
-                                var insertedRows: [Any] = []
-                                for (index, row) in queryUpdate.inserts.rows.enumerated() {
-                                    // Skip empty row data
-                                    if row.isEmpty {
-                                        continue
-                                    }
-                                    do {
-                                        let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                        let typedRow = try decoder.decode(reader: reader)
-                                        insertedRows.append(typedRow)
-                                    } catch {
-                                        debugLog(">>>     Error decoding inserted row \(index): \(error)")
-                                    }
-                                }
-
-                                // Process deletes
-                                var deletedRows: [Any] = []
-                                for (index, row) in queryUpdate.deletes.rows.enumerated() {
-                                    // Skip empty row data
-                                    if row.isEmpty {
-                                        continue
-                                    }
-                                    do {
-                                        let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                        let typedRow = try decoder.decode(reader: reader)
-                                        deletedRows.append(typedRow)
-                                    } catch {
-                                        debugLog(">>>     Error decoding deleted row \(index): \(error)")
-                                    }
-                                }
-
-                                // Notify both legacy delegate and AsyncStream subscribers.
-                                self.emit(tableEvent: TableEvent(
-                                    tableName: tableUpdate.name,
-                                    deletes: deletedRows,
-                                    inserts: insertedRows
-                                ))
-                                await clientDelegate?.onTableUpdate(
-                                    client: self,
-                                    table: tableUpdate.name,
-                                    deletes: deletedRows,
-                                    inserts: insertedRows
-                                )
-                            } else {
-                                debugLog(">>>   No decoder registered for table: \(tableUpdate.name)")
-                            }
-                        } catch {
-                            debugLog(">>>   Error parsing QueryUpdate: \(error)")
-                        }
-                    }
-
-                    // Notify delegate that subscription is ready with hardcoded queryId: 1
-                    debugLog(">>> About to call onSubscribeMultiApplied with hardcoded queryId: 1")
-                    clientDelegate?.onSubscribeMultiApplied(client: self, queryId: 1)
-                    self.emit(subscription: .applied(queryId: 1, multi: true))
-                } catch {
-                    debugLog(">>> Error parsing InitialSubscription: \(error)")
-                    // Fallback to just notifying subscription ready
-                    clientDelegate?.onSubscribeMultiApplied(client: self, queryId: 1)
-                    self.emit(subscription: .applied(queryId: 1, multi: true))
-                }
-            } else if messageTag == Tags.ServerMessage.identityToken.rawValue {
-                // Read IdentityTokenMessage
-                let identityToken = try IdentityTokenMessage(modelValues: [
-                    try reader.readAlgebraicValue(as: .uint256),
-                    try reader.readAlgebraicValue(as: .string),
-                    try reader.readAlgebraicValue(as: .uint128)
-                ])
-                debugLog(">>> Identity: \(identityToken)")
-
-                // Store current identity, connectionId, and token (so reconnects reuse the server-issued token)
-                self.currentIdentity = identityToken.identity
-                self.currentConnectionId = identityToken.connectionId
-                self.lastToken = AuthenticationToken(rawValue: identityToken.token)
-                // IdentityToken proves the server accepted us → reset reconnect state.
-                self.reconnectAttempts = 0
-                await clientDelegate?.onIdentityReceived(client: self, token: identityToken.token, identity: identityToken.identity)
-                self.emit(connection: .connected(
-                    identity: Identity(identityToken.identity),
-                    connectionId: identityToken.connectionId,
-                    token: identityToken.token
-                ))
-            } else if messageTag == Tags.ServerMessage.subscribeApplied.rawValue {
-                // Read SubscribeApplied (single subscription)
-                let subscribeApplied = try SubscribeAppliedMessage(reader: reader)
-                debugLog(">>> SubscribeApplied: requestId=\(subscribeApplied.requestId), queryId=\(subscribeApplied.queryId), tables=\(subscribeApplied.update.tableUpdates.count)")
-
-                // Process table updates (same logic as multi subscription)
-                for tableUpdate in subscribeApplied.update.tableUpdates {
-                    debugLog(">>> Table: \(tableUpdate.name) (id: \(tableUpdate.id), rows: \(tableUpdate.numRows))")
-
-                    do {
-                        let queryUpdate = try tableUpdate.getQueryUpdate()
-                        debugLog(">>>   Deletes: \(queryUpdate.deletes.rows.count) rows")
-                        debugLog(">>>   Inserts: \(queryUpdate.inserts.rows.count) rows")
-
-                        let decoder = decoder(forTable: tableUpdate.name)
-                        if let decoder {
-                            // Process inserts
-                            var insertedRows: [Any] = []
-                            for (index, row) in queryUpdate.inserts.rows.enumerated() {
-                                do {
-                                    let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                    let typedRow = try decoder.decode(reader: reader)
-                                    insertedRows.append(typedRow)
-                                    debugLog(">>>     Row \(index) for \(tableUpdate.name): \(typedRow)")
-                                } catch {
-                                    debugLog(">>>     Error decoding row \(index): \(error)")
-                                }
-                            }
-
-                            // Process deletes
-                            var deletedRows: [Any] = []
-                            for (index, row) in queryUpdate.deletes.rows.enumerated() {
-                                // Skip empty row data
-                                if row.isEmpty {
-                                    continue
-                                }
-                                do {
-                                    let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                    let typedRow = try decoder.decode(reader: reader)
-                                    deletedRows.append(typedRow)
-                                } catch {
-                                    debugLog(">>>     Error decoding deleted row \(index): \(error)")
-                                }
-                            }
-
-                            // Notify both legacy delegate and AsyncStream subscribers.
-                            self.emit(tableEvent: TableEvent(
-                                tableName: tableUpdate.name,
-                                deletes: deletedRows,
-                                inserts: insertedRows
-                            ))
-                                        await clientDelegate?.onTableUpdate(
-                                client: self,
-                                table: tableUpdate.name,
-                                deletes: deletedRows,
-                                inserts: insertedRows
-                            )
-                        } else {
-                            debugLog(">>>   No decoder registered for table: \(tableUpdate.name)")
-                        }
-                    } catch {
-                        debugLog(">>>   Error parsing QueryUpdate: \(error)")
-                    }
-                }
-
-                // Notify delegate about single subscription
-                clientDelegate?.onSubscribeApplied(client: self, queryId: subscribeApplied.queryId)
-                self.emit(subscription: .applied(queryId: subscribeApplied.queryId, multi: false))
-                self.resolveSubscriptionApplied(queryId: subscribeApplied.queryId)
-            } else if messageTag == Tags.ServerMessage.subscribeMultiApplied.rawValue {
-                // Read SubscribeMultiApplied directly from reader
-                let subscribeMultiApplied = try SubscribeMultiApplied(reader: reader)
-                debugLog(">>> SubscribeMultiApplied: requestId=\(subscribeMultiApplied.requestId), tables=\(subscribeMultiApplied.update.tableUpdates.count)")
-
-                for tableUpdate in subscribeMultiApplied.update.tableUpdates {
-                    debugLog(">>> Table: \(tableUpdate.name) (id: \(tableUpdate.id), rows: \(tableUpdate.numRows))")
-
-                    do {
-                        let queryUpdate = try tableUpdate.getQueryUpdate()
-                        debugLog(">>>   Deletes: \(queryUpdate.deletes.rows.count) rows")
-                        debugLog(">>>   Inserts: \(queryUpdate.inserts.rows.count) rows")
-
-                        let decoder = decoder(forTable: tableUpdate.name)
-                        if let decoder {
-                            // Process inserts
-                            var insertedRows: [Any] = []
-                            for (index, row) in queryUpdate.inserts.rows.enumerated() {
-                                do {
-                                    let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                    let typedRow = try decoder.decode(reader: reader)
-                                    insertedRows.append(typedRow)
-                                    debugLog(">>>     Row \(index) for \(tableUpdate.name): \(typedRow)")
-                                } catch {
-                                    debugLog(">>>     Error decoding row \(index): \(error)")
-                                }
-                            }
-
-                            // Process deletes
-                            var deletedRows: [Any] = []
-                            for (index, row) in queryUpdate.deletes.rows.enumerated() {
-                                // Skip empty row data
-                                if row.isEmpty {
-                                    continue
-                                }
-                                do {
-                                    let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                    let typedRow = try decoder.decode(reader: reader)
-                                    deletedRows.append(typedRow)
-                                } catch {
-                                    debugLog(">>>     Error decoding deleted row \(index): \(error)")
-                                }
-                            }
-
-                            // Notify both legacy delegate and AsyncStream subscribers.
-                            self.emit(tableEvent: TableEvent(
-                                tableName: tableUpdate.name,
-                                deletes: deletedRows,
-                                inserts: insertedRows
-                            ))
-                                        await clientDelegate?.onTableUpdate(
-                                client: self,
-                                table: tableUpdate.name,
-                                deletes: deletedRows,
-                                inserts: insertedRows
-                            )
-                        } else {
-                            debugLog(">>>   No decoder registered for table: \(tableUpdate.name)")
-                        }
-                    } catch {
-                        debugLog(">>>   Error parsing QueryUpdate: \(error)")
-                    }
-                }
-
-                // Notify delegate
-                clientDelegate?.onSubscribeMultiApplied(client: self, queryId: subscribeMultiApplied.queryId)
-                self.emit(subscription: .applied(queryId: subscribeMultiApplied.queryId, multi: true))
-                self.resolveSubscriptionApplied(queryId: subscribeMultiApplied.queryId)
-            } else if messageTag == Tags.ServerMessage.transactionUpdate.rawValue {
-                // Read TransactionUpdate - pass the reader directly instead of remainingData
-                debugLog(">>> Attempting to read TransactionUpdate from offset: \(reader.currentOffset)")
-
-                // Create TransactionUpdate with the reader directly
-                let update = try TransactionUpdate(reader: reader)
-
-                // Check if this is from another user
-                let isOwnUpdate = (update.callerIdentity.description == self.currentIdentity?.description)
-                let updateSource = isOwnUpdate ? "OWN" : "OTHER USER"
-
-                debugLog(">>> TransactionUpdate from \(updateSource):")
-                debugLog(">>>   Reducer: \(update.reducerName)")
-                debugLog(">>>   Caller: \(update.callerIdentity.description.prefix(16))...")
-                debugLog(">>>   Request ID: \(update.reducerCall.requestId)")
-                debugLog(">>>   Status: \(update.eventStatusDescription)")
-
-                // Notify delegate about reducer response (typed form;
-                // default impl bridges to the legacy string-status method).
-                await clientDelegate?.onReducerResponse(
-                    client: self,
-                    requestId: update.reducerCall.requestId,
-                    reducerName: update.reducerName,
-                    status: update.status.reducerStatus,
-                    energy: update.energyQuantaUsed
-                )
-                self.emit(reducer: ReducerEvent(
-                    requestId: update.reducerCall.requestId,
-                    reducerName: update.reducerName,
-                    status: update.status.reducerStatus,
-                    energy: update.energyQuantaUsed
-                ))
-
-                // Name changes will be detected and displayed by the delegate
-                // when it compares the cached names with the new data
-
-                // Process database updates
-                for tableUpdate in update.databaseUpdate.tableUpdates {
-                    debugLog(">>>   Table: \(tableUpdate.name) with \(tableUpdate.queryUpdates.count) query updates")
-
-                    // Get the decoder for this table
-                    let decoder = decoder(forTable: tableUpdate.name)
-
-                    // Collect ALL deletes and inserts for this table across all QueryUpdates
-                    var allDeletedRows: [Any] = []
-                    var allInsertedRows: [Any] = []
-
-                    // Process each CompressibleQueryUpdate in the table
-                    for compUpdate in tableUpdate.queryUpdates {
-                        guard case .uncompressed(let queryUpdate) = compUpdate else {
-                            debugLog(">>>     Warning: Compressed updates not yet supported")
-                            continue
-                        }
-
-                        debugLog(">>>     QueryUpdate: \(queryUpdate.deletes.rows.count) deletes, \(queryUpdate.inserts.rows.count) inserts")
-
-                        // Debug: Check row data sizes
-                        for (idx, row) in queryUpdate.deletes.rows.enumerated() {
-                            debugLog(">>>       Delete row \(idx): \(row.count) bytes")
-                        }
-                        for (idx, row) in queryUpdate.inserts.rows.enumerated() {
-                            debugLog(">>>       Insert row \(idx): \(row.count) bytes")
-                        }
-
-                        // Process deletes
-                        if !queryUpdate.deletes.rows.isEmpty {
-                            if let decoder {
-                                for row in queryUpdate.deletes.rows {
-                                    // Skip empty row data (common in TransactionUpdate)
-                                    if row.isEmpty {
-                                        continue
-                                    }
-                                    do {
-                                        let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                        let typedRow = try decoder.decode(reader: reader)
-                                        allDeletedRows.append(typedRow)
-                                    } catch {
-                                        debugLog(">>>     Error decoding deleted row: \(error)")
-                                    }
-                                }
-                            } else {
-                                // No decoder, pass raw data
-                                for row in queryUpdate.deletes.rows where !row.isEmpty {
-                                    allDeletedRows.append(row)
-                                }
-                            }
-                        }
-
-                        // Process inserts
-                        if !queryUpdate.inserts.rows.isEmpty {
-                            if let decoder {
-                                for row in queryUpdate.inserts.rows {
-                                    // Skip empty row data (common in TransactionUpdate)
-                                    if row.isEmpty {
-                                        continue
-                                    }
-                                    do {
-                                        let reader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                                        let typedRow = try decoder.decode(reader: reader)
-                                        allInsertedRows.append(typedRow)
-                                        if !isOwnUpdate {
-                                            debugLog(">>>     📢 New row from OTHER USER: \(typedRow)")
-                                        } else {
-                                            debugLog(">>>     New row (own update): \(typedRow)")
-                                        }
-                                    } catch {
-                                        debugLog(">>>     Error decoding inserted row: \(error)")
-                                    }
-                                }
-                            } else {
-                                // No decoder, pass raw data
-                                for row in queryUpdate.inserts.rows where !row.isEmpty {
-                                    allInsertedRows.append(row)
-                                }
-                            }
-                        }
-                    }
-
-                    // Always call the delegate if we have any rows (even if just raw data)
-                    if !allDeletedRows.isEmpty || !allInsertedRows.isEmpty {
-                        debugLog(">>>   Calling onTableUpdate for '\(tableUpdate.name)': \(allDeletedRows.count) deletes, \(allInsertedRows.count) inserts")
-                        self.emit(tableEvent: TableEvent(
-                            tableName: tableUpdate.name,
-                            deletes: allDeletedRows,
-                            inserts: allInsertedRows
-                        ))
-                        await clientDelegate?.onTableUpdate(
-                            client: self,
-                            table: tableUpdate.name,
-                            deletes: allDeletedRows,
-                            inserts: allInsertedRows
-                        )
-                    } else {
-                        debugLog(">>>   No rows to report for table '\(tableUpdate.name)'")
-                    }
-                }
-            } else if messageTag == Tags.ServerMessage.oneOffQueryResponse.rawValue {
-                // Read OneOffQueryResponse
-                let response = try OneOffQueryResponse(reader: reader)
-                debugLog(">>> OneOffQueryResponse received for messageId: \(response.messageId.map { String(format: "%02X", $0) }.joined())")
-
-                if let error = response.error {
-                    debugLog(">>> Query error: \(error)")
-                } else {
-                    debugLog(">>> Query successful with \(response.tables.count) tables")
-                    for table in response.tables {
-                        debugLog(">>>   Table: \(table.name) with \(table.rows.count) rows")
-                    }
-                }
-
-                handleOneOffQueryResponse(response)
-            } else if messageTag == Tags.ServerMessage.unsubscribeApplied.rawValue {
-                // Read UnsubscribeAppliedMessage (single unsubscribe)
-                let unsubscribeApplied = try UnsubscribeAppliedMessage(reader: reader)
-                debugLog(">>> UnsubscribeApplied received for queryId: \(unsubscribeApplied.queryId)")
-
-                await clientDelegate?.onUnsubscribeApplied(client: self, queryId: unsubscribeApplied.queryId)
-                self.emit(subscription: .unsubscribed(queryId: unsubscribeApplied.queryId, multi: false))
-                self.resolveSubscriptionUnsubscribed(queryId: unsubscribeApplied.queryId)
-            } else if messageTag == Tags.ServerMessage.unsubscribeMultiApplied.rawValue {
-                // Read UnsubscribeMultiAppliedMessage
-                let unsubscribeMultiApplied = try UnsubscribeMultiAppliedMessage(reader: reader)
-                debugLog(">>> UnsubscribeMultiApplied received for queryId: \(unsubscribeMultiApplied.queryId)")
-
-                await clientDelegate?.onUnsubscribeApplied(client: self, queryId: unsubscribeMultiApplied.queryId)
-                self.emit(subscription: .unsubscribed(queryId: unsubscribeMultiApplied.queryId, multi: true))
-                self.resolveSubscriptionUnsubscribed(queryId: unsubscribeMultiApplied.queryId)
-            } else if messageTag == Tags.ServerMessage.subscriptionError.rawValue {
-                let subscriptionError = try SubscriptionErrorMessage(reader: reader)
-                await clientDelegate?.onSubscriptionError(
-                    client: self,
-                    queryId: subscriptionError.queryId,
-                    tableId: subscriptionError.tableId,
-                    error: subscriptionError.error
-                )
-                self.emit(subscription: .error(
-                    queryId: subscriptionError.queryId,
-                    tableId: subscriptionError.tableId,
-                    message: subscriptionError.error
-                ))
-                self.failSubscriptionFutures(queryId: subscriptionError.queryId, message: subscriptionError.error)
-            } else if messageTag == Tags.ServerMessage.transactionUpdateLight.rawValue {
-                let transactionUpdateLight = try TransactionUpdateLightMessage(reader: reader)
-                await processDatabaseUpdate(transactionUpdateLight.update)
-                await clientDelegate?.onTransactionUpdateLight(
-                    client: self,
-                    requestId: transactionUpdateLight.requestId
-                )
+            switch messageTag {
+            case Tags.ServerMessage.initialConnection.rawValue:
+                try await handleInitialConnection(reader: reader)
+            case Tags.ServerMessage.subscribeApplied.rawValue:
+                try await handleSubscribeApplied(reader: reader)
+            case Tags.ServerMessage.unsubscribeApplied.rawValue:
+                try await handleUnsubscribeApplied(reader: reader)
+            case Tags.ServerMessage.subscriptionError.rawValue:
+                try await handleSubscriptionError(reader: reader)
+            case Tags.ServerMessage.transactionUpdate.rawValue:
+                try await handleTransactionUpdate(reader: reader)
+            case Tags.ServerMessage.oneOffQueryResult.rawValue:
+                try await handleOneOffQueryResult(reader: reader)
+            case Tags.ServerMessage.reducerResult.rawValue:
+                try await handleReducerResult(reader: reader)
+            case Tags.ServerMessage.procedureResult.rawValue:
+                try await handleProcedureResult(reader: reader)
+            default:
+                debugLog(">>> Unknown server message tag: \(messageTag)")
             }
         } catch {
-            debugLog(">>> Failed to decode: \(error)")
+            debugLog(">>> Failed to decode message tag \(messageTag): \(error)")
         }
     }
 
-    /// Decode and dispatch row diffs from a DatabaseUpdate to registered table decoders.
-    /// Used by both TransactionUpdate and TransactionUpdateLight paths.
-    private func processDatabaseUpdate(_ update: DatabaseUpdate) async {
-        for tableUpdate in update.tableUpdates {
-            do {
-                let queryUpdate = try tableUpdate.getQueryUpdate()
-                guard let decoder = decoder(forTable: tableUpdate.name) else {
-                    debugLog(">>> No decoder registered for table: \(tableUpdate.name)")
-                    continue
+    // MARK: - Per-message handlers
+
+    private func handleInitialConnection(reader: BSATNReader) async throws {
+        let msg = try InitialConnectionMessage(reader: reader)
+        currentIdentity = msg.identity
+        currentConnectionId = ConnectionId(msg.connectionId)
+        lastToken = AuthenticationToken(rawValue: msg.token)
+        reconnectAttempts = 0
+        await clientDelegate?.onIdentityReceived(client: self, token: msg.token, identity: msg.identity)
+        emit(connection: .connected(
+            identity: Identity(msg.identity),
+            connectionId: ConnectionId(msg.connectionId),
+            token: msg.token
+        ))
+    }
+
+    private func handleSubscribeApplied(reader: BSATNReader) async throws {
+        let msg = try SubscribeAppliedMessage(reader: reader)
+        let queryId = msg.querySetId.id
+        await dispatchInitialRows(msg.rows)
+        await clientDelegate?.onSubscribeApplied(client: self, queryId: queryId)
+        emit(subscription: .applied(queryId: queryId))
+        resolveSubscriptionApplied(queryId: queryId)
+    }
+
+    private func handleUnsubscribeApplied(reader: BSATNReader) async throws {
+        let msg = try UnsubscribeAppliedMessage(reader: reader)
+        let queryId = msg.querySetId.id
+        if let dropped = msg.droppedRows {
+            // Server echoed the rows being removed (SendDroppedRows flag).
+            // Surface as deletes on the per-table streams so observers can
+            // invalidate their caches.
+            await dispatchDroppedRows(dropped)
+        }
+        await clientDelegate?.onUnsubscribeApplied(client: self, queryId: queryId)
+        emit(subscription: .unsubscribed(queryId: queryId))
+        resolveSubscriptionUnsubscribed(queryId: queryId)
+    }
+
+    private func handleSubscriptionError(reader: BSATNReader) async throws {
+        let msg = try SubscriptionErrorMessage(reader: reader)
+        let queryId = msg.querySetId.id
+        await clientDelegate?.onSubscriptionError(
+            client: self,
+            queryId: queryId,
+            requestId: msg.requestId,
+            error: msg.error
+        )
+        emit(subscription: .error(queryId: queryId, requestId: msg.requestId, message: msg.error))
+        failSubscriptionFutures(queryId: queryId, message: msg.error)
+    }
+
+    private func handleTransactionUpdate(reader: BSATNReader) async throws {
+        let update = try TransactionUpdate(reader: reader)
+        await dispatchTransactionUpdate(update)
+    }
+
+    private func handleOneOffQueryResult(reader: BSATNReader) async throws {
+        let msg = try OneOffQueryResultMessage(reader: reader)
+        resolveOneOffQuery(msg)
+    }
+
+    private func handleReducerResult(reader: BSATNReader) async throws {
+        let msg = try ReducerResultMessage(reader: reader)
+        let reducerName = self.reducerName(forRequestId: msg.requestId) ?? "<unknown>"
+        let timestamp = Date(timeIntervalSince1970: TimeInterval(msg.timestampNanos) / 1_000_000_000)
+
+        // Dispatch table updates BEFORE resolving the caller's continuation
+        // so observers see the row diffs at least as early as the caller
+        // sees the success return value.
+        if case .ok(_, let txUpdate) = msg.outcome {
+            await dispatchTransactionUpdate(txUpdate)
+        }
+
+        emit(reducer: ReducerEvent(
+            requestId: msg.requestId,
+            reducerName: reducerName,
+            timestamp: timestamp,
+            outcome: msg.outcome
+        ))
+        await clientDelegate?.onReducerResponse(
+            client: self,
+            requestId: msg.requestId,
+            reducerName: reducerName,
+            outcome: msg.outcome
+        )
+        resolvePendingReducer(
+            requestId: msg.requestId,
+            timestampNanos: msg.timestampNanos,
+            outcome: msg.outcome
+        )
+    }
+
+    private func handleProcedureResult(reader: BSATNReader) async throws {
+        let msg = try ProcedureResultMessage(reader: reader)
+        let procedureName = self.procedureName(forRequestId: msg.requestId) ?? "<unknown>"
+        await clientDelegate?.onProcedureResponse(
+            client: self,
+            requestId: msg.requestId,
+            procedureName: procedureName,
+            status: msg.status
+        )
+        resolvePendingProcedure(requestId: msg.requestId, status: msg.status)
+    }
+
+    // MARK: - Row dispatch helpers
+
+    /// Decode and emit the snapshot rows from `SubscribeApplied.rows`.
+    /// All rows are surfaced as inserts (it's the initial state).
+    private func dispatchInitialRows(_ rows: QueryRows) async {
+        for table in rows.tables {
+            let inserts = decodeRows(table.rows.rows, tableName: table.tableName)
+            if inserts.isEmpty { continue }
+            await emitTableUpdate(tableName: table.tableName, deletes: [], inserts: inserts)
+        }
+    }
+
+    /// Decode and emit the dropped-row payload from `UnsubscribeApplied.rows`
+    /// (only present when SendDroppedRows was requested). All rows are
+    /// surfaced as deletes.
+    private func dispatchDroppedRows(_ rows: QueryRows) async {
+        for table in rows.tables {
+            let deletes = decodeRows(table.rows.rows, tableName: table.tableName)
+            if deletes.isEmpty { continue }
+            await emitTableUpdate(tableName: table.tableName, deletes: deletes, inserts: [])
+        }
+    }
+
+    /// Decode and emit row diffs from a `TransactionUpdate`, batching
+    /// per (tableName) across all query sets and TableUpdateRows variants.
+    private func dispatchTransactionUpdate(_ update: TransactionUpdate) async {
+        // Collapse all per-(querySet, table, rows-variant) diffs into a
+        // single (deletes, inserts) pair per table name. Event-table rows
+        // are surfaced as inserts (they fire onInsert but aren't retained).
+        var bucket: [String: (deletes: [Any], inserts: [Any])] = [:]
+
+        for set in update.querySets {
+            for table in set.tables {
+                for rowSet in table.rows {
+                    switch rowSet {
+                    case .persistent(let inserts, let deletes):
+                        let dec = decodeRows(deletes.rows, tableName: table.tableName)
+                        let ins = decodeRows(inserts.rows, tableName: table.tableName)
+                        if dec.isEmpty && ins.isEmpty { continue }
+                        bucket[table.tableName, default: ([], [])].deletes.append(contentsOf: dec)
+                        bucket[table.tableName, default: ([], [])].inserts.append(contentsOf: ins)
+                    case .event(let events):
+                        let ins = decodeRows(events.rows, tableName: table.tableName)
+                        if ins.isEmpty { continue }
+                        bucket[table.tableName, default: ([], [])].inserts.append(contentsOf: ins)
+                    }
                 }
-                var insertedRows: [Any] = []
-                for row in queryUpdate.inserts.rows where !row.isEmpty {
-                    let rowReader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                    insertedRows.append(try decoder.decode(reader: rowReader))
-                }
-                var deletedRows: [Any] = []
-                for row in queryUpdate.deletes.rows where !row.isEmpty {
-                    let rowReader = BSATNReader(data: row, debugEnabled: debugEnabled)
-                    deletedRows.append(try decoder.decode(reader: rowReader))
-                }
-                self.emit(tableEvent: TableEvent(
-                    tableName: tableUpdate.name,
-                    deletes: deletedRows,
-                    inserts: insertedRows
-                ))
-                await clientDelegate?.onTableUpdate(
-                    client: self,
-                    table: tableUpdate.name,
-                    deletes: deletedRows,
-                    inserts: insertedRows
-                )
-            } catch {
-                debugLog(">>> Error processing table update for \(tableUpdate.name): \(error)")
             }
         }
+
+        for (tableName, diff) in bucket {
+            await emitTableUpdate(tableName: tableName, deletes: diff.deletes, inserts: diff.inserts)
+        }
     }
 
-    // MARK: - Hexadecimal Data Viewer
+    /// Fan out a single table's diff to the legacy delegate, the per-table
+    /// stream, and the per-row stream (with PK-matched updates).
+    private func emitTableUpdate(tableName: String, deletes: [Any], inserts: [Any]) async {
+        let event = TableEvent(tableName: tableName, deletes: deletes, inserts: inserts)
+        emit(tableEvent: event)
+        await clientDelegate?.onTableUpdate(client: self, event: event)
+    }
 
-    /// Display data in hexadecimal format (16 bytes per line with offsets)
+    /// Decode a flat array of BSATN-encoded rows for the named table.
+    /// If no decoder is registered, returns the raw `Data` rows so the
+    /// caller can still see the diff (legacy behaviour).
+    private func decodeRows(_ rawRows: [Data], tableName: String) -> [Any] {
+        guard !rawRows.isEmpty else { return [] }
+        guard let decoder = decoder(forTable: tableName) else {
+            debugLog(">>> No decoder registered for table: \(tableName); returning raw rows")
+            return rawRows.filter { !$0.isEmpty }.map { $0 as Any }
+        }
+        var result: [Any] = []
+        result.reserveCapacity(rawRows.count)
+        for row in rawRows where !row.isEmpty {
+            do {
+                let r = BSATNReader(data: row, debugEnabled: debugEnabled)
+                result.append(try decoder.decode(reader: r))
+            } catch {
+                debugLog(">>> Error decoding row from \(tableName): \(error)")
+            }
+        }
+        return result
+    }
+
+    // MARK: - Hex dump
+
     private func printHexData(_ data: Data) {
         let bytes = Array(data)
         let bytesPerLine = 16
-        let maxBytes = 16384  // Limit hex dump to first 16KB for debugging
+        let maxBytes = 16384
         let bytesToPrint = min(bytes.count, maxBytes)
 
         for i in stride(from: 0, to: bytesToPrint, by: bytesPerLine) {
-            // Print offset in hex
             print(String(format: "0x%08X: ", i), terminator: "")
-
-            // Print hex bytes
             for j in 0..<bytesPerLine {
                 if i + j < bytes.count {
                     print(String(format: "%02X ", bytes[i + j]), terminator: "")
                 } else {
-                    print("   ", terminator: "") // Padding for missing bytes
+                    print("   ", terminator: "")
                 }
-
-                // Add extra space between groups of 8 bytes for readability
                 if j == 7 && i + j < bytes.count {
                     print(" ", terminator: "")
                 }
             }
-
-            // Print ASCII representation
             print(" |", terminator: "")
             for j in 0..<bytesPerLine {
                 if i + j < bytes.count {
                     let byte = bytes[i + j]
-                    if byte >= 32 && byte <= 126 { // Printable ASCII range
-                        print(String(format: "%c", byte), terminator: "")
-                    } else {
-                        print(".", terminator: "")
-                    }
+                    print(byte >= 32 && byte <= 126 ? String(format: "%c", byte) : ".", terminator: "")
                 } else {
                     print(" ", terminator: "")
                 }
             }
             print("|")
         }
-
         if bytes.count > maxBytes {
             print("... (truncated, showing first \(maxBytes) of \(bytes.count) bytes)")
         }
-
         print(String(format: "Total bytes: %d (0x%X)", data.count, data.count))
-    }
-
-    // MARK: - Decompression Helpers
-
-    /// Decompress Brotli data using native Compression framework
-    private func decompressBrotli(data: Data) -> Data? {
-        // Estimate decompressed size - use a much larger buffer for safety
-        let decodedCapacity = max(data.count * 50, 1024 * 1024) // At least 1MB buffer
-        let decodedBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: decodedCapacity)
-        defer { decodedBuffer.deallocate() }
-
-        debugLog(">>> Attempting Brotli decompression: \(data.count) bytes -> buffer: \(decodedCapacity) bytes")
-
-        let decodedData: Data? = data.withUnsafeBytes { sourceBuffer in
-            guard let sourcePtr = sourceBuffer.bindMemory(to: UInt8.self).baseAddress else {
-                return nil
-            }
-
-            let decompressedSize = compression_decode_buffer(
-                decodedBuffer, decodedCapacity,
-                sourcePtr, data.count,
-                nil, COMPRESSION_BROTLI
-            )
-
-            guard decompressedSize > 0 else {
-                debugLog(">>> Brotli decompression failed, returned: \(decompressedSize)")
-                return nil
-            }
-            debugLog(">>> Brotli decompression successful: \(decompressedSize) bytes")
-            return Data(bytes: decodedBuffer, count: decompressedSize)
-        }
-
-        return decodedData
     }
 }

@@ -1,39 +1,34 @@
 //
-//  UnsubscribeMultiAppliedMessage.swift
+//  UnsubscribeAppliedMessage.swift
 //  spacetimedb-swift-sdk
 //
-//  Created by Dave Poirier on 2025-08-28.
+//  v2 ServerMessage tag 0x02.
+//  Wire: request_id (u32) + query_set_id (u32) + rows: Option<QueryRows>.
+//
+//  `rows` is populated only if the original Unsubscribe message had the
+//  SendDroppedRows flag set; otherwise the dropped rows are not echoed.
 //
 
 import Foundation
 import BSATN
 
-public struct UnsubscribeMultiAppliedMessage: Sendable {
-    public let requestId: UInt32
-    public let totalHostExecutionDurationMicros: UInt64
-    public let queryId: UInt32
-    public let update: DatabaseUpdate
-    
-    init(reader: BSATNReader) throws {
-        requestId = try reader.read()
-        totalHostExecutionDurationMicros = try reader.read()
-        queryId = try reader.read()
-        update = try DatabaseUpdate(reader: reader)
-        debugLog(">>> UnsubscribeMultiAppliedMessage: requestId=\(requestId), queryId=\(queryId)")
-    }
-}
-
 public struct UnsubscribeAppliedMessage: Sendable {
     public let requestId: UInt32
-    public let totalHostExecutionDurationMicros: UInt64
-    public let queryId: UInt32
-    public let update: DatabaseUpdate
-    
+    public let querySetId: QuerySetId
+    public let droppedRows: QueryRows?
+
     init(reader: BSATNReader) throws {
-        requestId = try reader.read()
-        totalHostExecutionDurationMicros = try reader.read()
-        queryId = try reader.read()
-        update = try DatabaseUpdate(reader: reader)
-        debugLog(">>> UnsubscribeAppliedMessage: requestId=\(requestId), queryId=\(queryId)")
+        self.requestId = try reader.read()
+        self.querySetId = try QuerySetId(reader: reader)
+        let optionTag: UInt8 = try reader.read()
+        switch optionTag {
+        case 0:
+            self.droppedRows = try QueryRows(reader: reader)
+        case 1:
+            self.droppedRows = nil
+        default:
+            throw BSATNError.unsupportedTag(optionTag)
+        }
+        debugLog(">>> UnsubscribeApplied: requestId=\(requestId), querySetId=\(querySetId.id), droppedRows=\(droppedRows?.tables.count.description ?? "nil")")
     }
 }

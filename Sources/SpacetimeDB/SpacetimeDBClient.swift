@@ -146,8 +146,25 @@ public actor SpacetimeDBClient {
     // Table Row Decoders
     private var tableRowDecoders: [String: TableRowDecoder] = [:]
 
-    // OneOffQuery Management
-    internal var pendingOneOffQueries: [Data: CheckedContinuation<OneOffQueryResult, Error>] = [:]
+    // OneOffQuery Management — keyed by request_id (v2). Resolves with the
+    // wire-level message; the public API in `+oneOffQuery.swift` adapts it.
+    internal var pendingOneOffQueries: [UInt32: CheckedContinuation<OneOffQueryResultMessage, Error>] = [:]
+
+    // Pending callReducer continuations, keyed by request_id. Reducers are
+    // correlated by name (server doesn't echo the name in v2's ReducerResult),
+    // so we stash the name here to enrich `ReducerEvent`s.
+    internal var pendingReducerCalls: [UInt32: PendingReducerCall] = [:]
+    // Pending callProcedure continuations, keyed by request_id.
+    internal var pendingProcedureCalls: [UInt32: PendingProcedureCall] = [:]
+
+    internal struct PendingReducerCall {
+        let reducerName: String
+        let continuation: CheckedContinuation<ReducerSuccess, Error>
+    }
+    internal struct PendingProcedureCall {
+        let procedureName: String
+        let continuation: CheckedContinuation<Data, Error>
+    }
 
     // Phase 3: AsyncStream continuation registries (one bucket per channel).
     internal var connectionContinuations: [UUID: AsyncStream<ConnectionEvent>.Continuation] = [:]

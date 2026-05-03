@@ -2,119 +2,91 @@
 //  SpacetimeDBClient+oneOffQuery.swift
 //  spacetimedb-swift-sdk
 //
-//  Created by Dave Poirier on 2025-08-27.
+//  v2 OneOffQuery — single-shot SQL with no real-time updates.
+//  Returns table-scoped row data; on server-side error, throws.
 //
 
 import Foundation
 import BSATN
 
-public struct OneOffQueryResult: Sendable {
-    public let messageId: Data
-    public let error: String?
-    public let tables: [OneOffTable]
-    public let executionDuration: UInt64
-    
-    /// Decode rows from a table using the client's registered decoder
-    public func decodeRows<T>(from tableName: String, using client: SpacetimeDBClient) async -> [T] {
-        guard let table = tables.first(where: { $0.name == tableName }),
-              let decoder = await client.decoder(forTable: tableName) else {
-            return []
-        }
-        
-        var decodedRows: [T] = []
-        for (index, rowData) in table.rows.enumerated() {
-            do {
-                let reader = BSATNReader(data: rowData, debugEnabled: client.debugEnabled)
-                let modelValue = try reader.readAlgebraicValue(as: .product(decoder.model))
-                guard case .product(let values) = modelValue else { continue }
-                let typedRow = try decoder.decode(modelValues: values)
-                if let row = typedRow as? T {
-                    decodedRows.append(row)
-                }
-            } catch {
-                debugLog("Failed to decode row \(index) from table \(tableName): \(error)")
-            }
-        }
-        return decodedRows
-    }
+public enum OneOffQueryError: Error {
+    case serverError(String)
+    case timeout
 }
 
 extension SpacetimeDBClient {
-    /// Execute a one-time SQL query without establishing a subscription
-    /// - Parameter query: The SQL query string to execute
-    /// - Returns: A OneOffQueryResult containing the query results or error
-    /// - Throws: An error if the query fails to send or times out
-    public func oneOffQuery(_ queryString: String, timeout: TimeInterval = 10.0) async throws -> OneOffQueryResult {
-        guard let webSocketTask else {
-            throw SpacetimeDBErrors.notConnected
-        }
-        
-        // Generate unique message ID
-        let messageId = Data((0..<16).map { _ in UInt8.random(in: 0...255) })
-        
-        let request = OneOffQueryRequest(messageId: messageId, queryString: queryString)
-        let encodedRequest = try request.encode()
-        
-        debugLog(">>> Sending OneOffQuery: \(queryString)")
-        debugLog(">>> Message ID: \(messageId.map { String(format: "%02X", $0) }.joined())")
-        
-        // Create a continuation to wait for the response
-        return try await withCheckedThrowingContinuation { continuation in
+    /// Run a one-off SQL `SELECT` and return the matching rows grouped
+    /// by table. Throws `OneOffQueryError.serverError` if the server
+    /// rejects the query, or `.timeout` if no response arrives in time.
+    public func oneOffQuery(_ query: String, timeout: TimeInterval = 10.0) async throws -> [SingleTableRows] {
+        guard let webSocketTask else { throw Errors.disconnected }
+        let requestId = nextRequestId
+        let request = OneOffQueryRequest(requestId: requestId, queryString: query)
+        let payload = try request.encode()
+
+        let message: OneOffQueryResultMessage = try await withCheckedThrowingContinuation { continuation in
+            self.pendingOneOffQueries[requestId] = continuation
             Task {
-                // Store the continuation for this message ID
-                await self.addPendingOneOffQuery(messageId: messageId, continuation: continuation)
-                
-                // Send the request
                 do {
-                    try await webSocketTask.send(URLSessionWebSocketTask.Message.data(encodedRequest))
-                    
-                    // Set up timeout
+                    try await webSocketTask.send(.data(payload))
                     Task {
                         try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                        await self.timeoutOneOffQuery(messageId: messageId)
+                        await self.timeoutOneOffQuery(requestId: requestId)
                     }
                 } catch {
-                    await self.removePendingOneOffQuery(messageId: messageId)
-                    continuation.resume(throwing: error)
+                    await self.failOneOffQuery(requestId: requestId, error: error)
                 }
             }
         }
-    }
-    
-    // MARK: - Internal OneOffQuery Management
-    
-    internal func addPendingOneOffQuery(messageId: Data, continuation: CheckedContinuation<OneOffQueryResult, Error>) {
-        pendingOneOffQueries[messageId] = continuation
-    }
-    
-    internal func removePendingOneOffQuery(messageId: Data) {
-        pendingOneOffQueries.removeValue(forKey: messageId)
-    }
-    
-    internal func timeoutOneOffQuery(messageId: Data) {
-        if let continuation = pendingOneOffQueries[messageId] {
-            pendingOneOffQueries.removeValue(forKey: messageId)
-            continuation.resume(throwing: SpacetimeDBErrors.timeout)
+
+        switch message.result {
+        case .ok(let rows):
+            return rows.tables
+        case .error(let error):
+            throw OneOffQueryError.serverError(error)
         }
     }
-    
-    internal func handleOneOffQueryResponse(_ response: OneOffQueryResponse) {
-        let result = OneOffQueryResult(
-            messageId: response.messageId,
-            error: response.error,
-            tables: response.tables,
-            executionDuration: response.totalHostExecutionDuration
-        )
-        
-        // Call delegate method
-        Task {
-            await clientDelegate?.onOneOffQueryResponse(client: self, result: result)
+
+    /// Decode every row of a named table from a `SingleTableRows` array
+    /// using the registered table-row decoder. Rows that fail to decode
+    /// are skipped (errors are debug-logged).
+    public func decodeRows<T>(from rows: [SingleTableRows], table tableName: String) async -> [T] {
+        guard let table = rows.first(where: { $0.tableName == tableName }),
+              let decoder = decoder(forTable: tableName)
+        else { return [] }
+
+        var decoded: [T] = []
+        decoded.reserveCapacity(table.rows.rows.count)
+        for (index, rowData) in table.rows.rows.enumerated() {
+            do {
+                let reader = BSATNReader(data: rowData, debugEnabled: debugEnabled)
+                let typed = try decoder.decode(reader: reader)
+                if let row = typed as? T {
+                    decoded.append(row)
+                }
+            } catch {
+                debugLog(">>> Failed to decode row \(index) from table \(tableName): \(error)")
+            }
         }
-        
-        // Resume waiting continuation if any
-        if let continuation = pendingOneOffQueries[response.messageId] {
-            pendingOneOffQueries.removeValue(forKey: response.messageId)
-            continuation.resume(returning: result)
+        return decoded
+    }
+
+    // MARK: Resolution helpers (called from the receive loop)
+
+    internal func resolveOneOffQuery(_ message: OneOffQueryResultMessage) {
+        guard let cont = pendingOneOffQueries.removeValue(forKey: message.requestId) else { return }
+        cont.resume(returning: message)
+    }
+
+    internal func failOneOffQuery(requestId: UInt32, error: Error) {
+        if let cont = pendingOneOffQueries.removeValue(forKey: requestId) {
+            cont.resume(throwing: error)
+        }
+    }
+
+    internal func timeoutOneOffQuery(requestId: UInt32) {
+        if let cont = pendingOneOffQueries.removeValue(forKey: requestId) {
+            cont.resume(throwing: OneOffQueryError.timeout)
         }
     }
 }

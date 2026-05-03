@@ -9,9 +9,6 @@ struct AsyncStreamTests {
     @Test func connectionEventsMultiSubscriberFanOut() async throws {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
 
-        // Two independent subscribers — registered synchronously inside
-        // the actor so events emitted right after this line cannot be
-        // missed (Phase 3 originally had a race here, since fixed).
         let s1 = await client.connectionEvents
         let s2 = await client.connectionEvents
 
@@ -47,33 +44,37 @@ struct AsyncStreamTests {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
         let stream = await client.reducerEvents
 
-        let zeros = Data(repeating: 0, count: 16)
-        let energy = try TransactionUpdate.EnergyQuanta(reader: BSATNReader(data: zeros))
         let event = ReducerEvent(
             requestId: 42,
             reducerName: "send_message",
-            status: .failed("nope"),
-            energy: energy
+            timestamp: Date(timeIntervalSince1970: 1_700_000_000),
+            outcome: .internalError("nope")
         )
         await client.emit(reducer: event)
 
         var iter = stream.makeAsyncIterator()
         let received = await iter.next()
-        #expect(received == event)
+        #expect(received?.requestId == 42)
+        #expect(received?.reducerName == "send_message")
+        if case .internalError(let msg) = received?.outcome {
+            #expect(msg == "nope")
+        } else {
+            Issue.record("Expected .internalError outcome")
+        }
     }
 
     @Test func subscriptionLifecycleStream() async throws {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
         let stream = await client.subscriptionEvents
 
-        await client.emit(subscription: .applied(queryId: 1, multi: true))
-        await client.emit(subscription: .unsubscribed(queryId: 1, multi: true))
-        await client.emit(subscription: .error(queryId: 7, tableId: nil, message: "boom"))
+        await client.emit(subscription: .applied(queryId: 1))
+        await client.emit(subscription: .unsubscribed(queryId: 1))
+        await client.emit(subscription: .error(queryId: 7, requestId: nil, message: "boom"))
 
         var iter = stream.makeAsyncIterator()
-        #expect(await iter.next() == .applied(queryId: 1, multi: true))
-        #expect(await iter.next() == .unsubscribed(queryId: 1, multi: true))
-        #expect(await iter.next() == .error(queryId: 7, tableId: nil, message: "boom"))
+        #expect(await iter.next() == .applied(queryId: 1))
+        #expect(await iter.next() == .unsubscribed(queryId: 1))
+        #expect(await iter.next() == .error(queryId: 7, requestId: nil, message: "boom"))
     }
 
     @Test func tableEventsBucketed() async throws {
@@ -99,21 +100,15 @@ struct AsyncStreamTests {
     @Test func cancellingConsumerUnregistersContinuation() async throws {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
 
-        // Open and immediately drop a subscriber inside a Task we cancel.
         let consumerTask = Task {
-            for await _ in await client.connectionEvents {
-                // Do nothing; cancellation will end the stream.
-            }
+            for await _ in await client.connectionEvents {}
         }
-        // Yield once so the consumer task's `await client.connectionEvents`
-        // call completes its synchronous registration before we check.
         try await Task.sleep(nanoseconds: 25_000_000)
 
         let beforeCancel = await client.connectionContinuationCount
         #expect(beforeCancel >= 1)
 
         consumerTask.cancel()
-        // onTermination still hops to the actor via Task — give it a beat.
         try await Task.sleep(nanoseconds: 100_000_000)
 
         let afterCancel = await client.connectionContinuationCount
@@ -122,16 +117,13 @@ struct AsyncStreamTests {
 
     /// Regression test for the original Phase-3 race: emitting an event
     /// the instant after the stream accessor returns must not be lost.
-    /// Pre-fix this would intermittently miss the event because
-    /// continuation registration was deferred to a fire-and-forget Task.
     @Test func emitImmediatelyAfterAccessIsNotLost() async throws {
         let client = try SpacetimeDBClient(host: "http://localhost:3000", db: "test")
         let stream = await client.subscriptionEvents
-        // No sleep — the emit happens within microseconds of stream creation.
-        await client.emit(subscription: .applied(queryId: 99, multi: false))
+        await client.emit(subscription: .applied(queryId: 99))
         var iter = stream.makeAsyncIterator()
         let event = await iter.next()
-        #expect(event == .applied(queryId: 99, multi: false))
+        #expect(event == .applied(queryId: 99))
     }
 }
 

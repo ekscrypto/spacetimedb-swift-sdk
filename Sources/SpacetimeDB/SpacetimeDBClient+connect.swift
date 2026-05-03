@@ -47,19 +47,19 @@ extension SpacetimeDBClient {
 
         var urlString = "\(wsHost)/v1/database/\(dbName)/subscribe?compression=\(compression.serverString)"
         if confirmedReads {
-            urlString += "&with_confirmed_reads=true"
+            urlString += "&confirmed=true"
         }
-        guard let v1Url = URL(string: urlString) else {
+        guard let url = URL(string: urlString) else {
             throw Errors.invalidServerAddress
         }
         var request = URLRequest(
-            url: v1Url,
+            url: url,
             cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
             timeoutInterval: timeout
         )
 
         request.setValue(uniqueSocketKey, forHTTPHeaderField: "Sec-WebSocket-Key")
-        request.setValue("v1.bsatn.spacetimedb", forHTTPHeaderField: "Sec-WebSocket-Protocol")
+        request.setValue("v2.bsatn.spacetimedb", forHTTPHeaderField: "Sec-WebSocket-Protocol")
         if let token {
             request.setValue("Bearer \(token.rawValue)", forHTTPHeaderField: "Authorization")
         }

@@ -2,37 +2,24 @@
 //  UnsubscribeRequest.swift
 //  spacetimedb-swift-sdk
 //
-//  Created by Dave Poirier on 2025-08-28.
+//  v2 Unsubscribe message — see crates/client-api-messages/src/websocket/v2.rs
+//  Wire: tag (u8=0x01) + request_id (u32) + query_set_id (u32) + flags (u8)
 //
 
 import Foundation
 import BSATN
 
-struct UnsubscribeMultiRequest {
-    let requestId: UInt32
-    let queryId: UInt32
-
-    func encode() throws -> Data {
-        let writer = BSATNWriter()
-        try writer.writeAlgebraicValue(.uint32(requestId))
-        try writer.writeAlgebraicValue(.uint32(queryId))
-        return writer.finalize()
-    }
-}
-
 struct UnsubscribeRequest {
     let requestId: UInt32
-    let queryId: UInt32
-
-    init(requestId: UInt32, queryId: UInt32) {
-        self.requestId = requestId
-        self.queryId = queryId
-    }
+    let querySetId: QuerySetId
+    let flags: UnsubscribeFlags
 
     func encode() throws -> Data {
         let writer = BSATNWriter()
+        writer.write(Tags.ClientMessage.unsubscribe.rawValue)
         writer.write(requestId)
-        writer.write(queryId)
+        querySetId.encode(to: writer)
+        flags.encode(to: writer)
         return writer.finalize()
     }
 }
