@@ -70,102 +70,6 @@ targets: [
 - **Platforms**: iOS 15.0+ / macOS 12.0+ (Brotli compression requires these minimums)
 - **Xcode**: 16.3 or later (ships Swift 6.1)
 
-## Sample Application: Quickstart Chat
-
-This repository includes a fully functional chat application demonstrating SpacetimeDB integration with Swift. The sample implements the same features as the official Rust and TypeScript quickstart tutorials.
-
-### Running the Chat Client
-
-1. First, set up the SpacetimeDB server with the quickstart-chat module following the [official tutorial](https://spacetimedb.com/docs/)
-2. Build and run the Swift client:
-   ```bash
-   swift build
-   ./.build/debug/quickstart-chat
-   ```
-
-#### Command Line Options
-
-The chat client supports several command line options for testing and debugging:
-
-```bash
-# Basic usage
-./.build/debug/quickstart-chat
-
-# Available options:
-./.build/debug/quickstart-chat [OPTIONS]
-```
-
-**Available Options:**
-
-- **`--clear-identity`** - Clears saved authentication token and creates a new anonymous identity
-  - **Use case**: Testing with a fresh identity, debugging authentication issues
-  - **Example**: `./.build/debug/quickstart-chat --clear-identity`
-
-- **`--fetch-users-only`** - Connects, fetches all users via OneOffQuery, then exits (no subscription)
-  - **Use case**: Testing OneOffQuery functionality, debugging server connectivity without real-time updates
-  - **Example**: `./.build/debug/quickstart-chat --fetch-users-only`
-
-- **`--no-subscribe`** - Connects without subscribing to any tables (no real-time updates)
-  - **Use case**: Testing basic connection, sending reducers without receiving table updates, debugging unsubscribe behavior
-  - **Behavior**: Can send messages and call reducers, but won't receive live updates from other clients
-  - **Example**: `./.build/debug/quickstart-chat --no-subscribe`
-
-- **`--streams`** - Run the streams-only demo (no `SpacetimeDBClientDelegate`)
-  - **Use case**: See the AsyncStream + `SubscriptionHandle` + `Credentials` API in action.
-  - **Implementation**: `Sources/quickstart-chat/StreamsChat.swift`.
-  - **Example**: `./.build/debug/quickstart-chat --streams`
-
-**Example Usage Scenarios:**
-
-```bash
-# Start fresh with a new identity
-./.build/debug/quickstart-chat --clear-identity
-
-# Test connection and fetch users without subscribing
-./.build/debug/quickstart-chat --fetch-users-only
-
-# Connect as send-only client (useful for testing unsubscribe scenarios)
-./.build/debug/quickstart-chat --no-subscribe
-```
-
-### Features
-
-The Swift chat client implements all core features from the official tutorials, plus additional enhancements:
-
-#### Core Features (matching Rust/TypeScript)
-- ✅ **Real-time messaging** - Send and receive chat messages instantly
-- ✅ **User identity** - Automatic anonymous authentication with token persistence
-- ✅ **Name setting** - Change your display name with `/name <name>`
-- ✅ **Online presence** - Track when users join and leave
-- ✅ **Message history** - View recent messages when joining
-- ✅ **Input validation** - Prevents empty names and messages
-
-#### Enhanced Features (Swift-specific)
-- 🎯 **Rename detection** - Shows "User X renamed to Y" notifications
-- 🎯 **Message distinction** - Your messages display differently from others
-- 🎯 **User listing** - `/users` command shows all online users
-- 🎯 **OneOffQuery support** - `--fetch-users-only` fetches all users without subscription
-- 🎯 **Subscription management** - `/sub` and `/unsub` commands with full unsubscribe functionality
-- 🎯 **Non-subscription mode** - `--no-subscribe` connects without real-time updates for testing
-- 🎯 **Subscription readiness** - Waits for data sync before accepting commands
-- 🎯 **Token persistence** - Maintains identity across sessions (use `--clear-identity` to reset)
-- 🎯 **Automatic reconnection** - Reconnects with exponential backoff on connection loss
-
-#### Available Commands
-- `/help` - Show available commands
-- `/name <name>` - Set your display name
-- `/users` - List online users
-- `/sub` - Subscribe to user and message updates
-- `/unsub` - Unsubscribe from current subscription
-- `/quit` - Exit the application
-- Any other text sends a chat message
-
-### Related Implementations
-
-For comparison and reference, see the official SpacetimeDB quickstart tutorials (each Rust quickstart covers both the server module and the client SDK):
-- [Rust Quickstart](https://spacetimedb.com/docs/quickstarts/rust)
-- [TypeScript Quickstart](https://spacetimedb.com/docs/quickstarts/typescript)
-
 ## Usage
 
 ### API at a glance
@@ -508,6 +412,21 @@ and the reference Rust / TypeScript clients.
 #### v2 → v3 in one line
 
 v3's schema is byte-identical to v2 (`v3.rs` re-exports `v2::ClientMessage` / `v2::ServerMessage`); the only change is a framing optimization that lets a single WebSocket binary frame carry several coalesced messages. v3 adoption only requires teaching the receive loop to loop-decode the payload — no new request or response types.
+
+## Sample application
+
+A working chat client built on this SDK lives at
+[`Sources/quickstart-chat/`](Sources/quickstart-chat/README.md). It implements
+the same feature set as the official Rust and TypeScript quickstart tutorials
+and is the easiest way to see the delegate and AsyncStream APIs end-to-end
+against `maincloud.spacetimedb.com` or a local server.
+
+```bash
+swift build && ./.build/debug/quickstart-chat
+```
+
+See [`Sources/quickstart-chat/README.md`](Sources/quickstart-chat/README.md) for
+command-line options, available chat commands, and the streams-only demo.
 
 ## Lessons learned
 
