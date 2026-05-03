@@ -458,9 +458,15 @@ The SDK has 192 tests across 26 suites (Swift Testing framework).
 ### Known Limitations
 
 1. **No streaming for very large messages** — entire frame is buffered
-2. **Procedures are minimal** — supported on the wire, but reducer-style typed-arg ergonomics aren't yet built out
-3. **No SwiftUI property wrappers** beyond `ObservableTable`
-4. **Non-String map keys** — Dictionaries with non-String keys are not exercised
+2. **No SwiftUI property wrappers** beyond `ObservableTable`
+3. **Non-String map keys** — Dictionaries with non-String keys are not exercised
+4. **`BSATNEventRow` not live-tested** — the `event` flag for
+   `#[spacetimedb::table(... event)]` is on upstream `master` but not
+   yet in the released `spacetimedb` crate (≤1.12). The Swift wire
+   parser, marker protocol, and codegen are all complete and unit-
+   tested; we just can't publish a server module that uses the flag
+   until it ships in a release. See `Tests/maincloud-fixtures/parity-module/README.md`
+   for the bring-up steps once it does.
 
 ### Roadmap / TODO
 
@@ -474,7 +480,11 @@ The SDK has 192 tests across 26 suites (Swift Testing framework).
 - [x] ~~Comprehensive unit tests for all protocol messages~~ ✅ (192 tests)
 - [x] ~~Migrate to v2 protocol (`v2.bsatn.spacetimedb`)~~ ✅
 - [x] ~~Add `callProcedure` (v2)~~ ✅
-- [ ] Typed `Procedure` protocol mirroring `Reducer` for callProcedure ergonomics
+- [x] ~~Typed `Procedure` protocol mirroring `Reducer`~~ ✅
+- [x] ~~Typed query DSL (mirrors Rust `crates/query-builder`)~~ ✅
+- [x] ~~`ClientMetrics` (mirrors Rust `unstable::CLIENT_METRICS`)~~ ✅
+- [x] ~~`BSATNEventRow` marker + typed `eventRows` stream~~ ✅ (live test pending upstream release)
+- [ ] **Re-add `telemetry_event` to parity-module + flip on the live `BSATNEventRow` smoke test once spacetimedb crate exposes the `event` flag** (master-only as of 1.12 — search this repo for `EVENT-FLAG-WAITING-ON-RELEASE`)
 - [ ] Performance optimizations for large datasets
 - [ ] More SwiftUI property wrappers for reactive updates
 - [ ] End-to-end integration tests against a local SpacetimeDB instance

@@ -13,6 +13,13 @@ import Foundation
 ///   2. Typed Procedure → callProcedure(_:)
 ///   3. ClientMetrics      → snapshot(db:)
 ///   4. (existing path)    → callReducer(_:) by way of set_name
+///
+/// EVENT-FLAG-WAITING-ON-RELEASE: A fifth piece — `BSATNEventRow` /
+/// `client.eventRows(_:)` — has no live test here yet because the
+/// server-side `event` flag for `#[spacetimedb::table(...)]` is
+/// upstream-master-only as of spacetimedb 1.12. See
+/// Tests/maincloud-fixtures/parity-module/README.md for the checklist
+/// to flip it on once the flag ships.
 @Suite("Live maincloud parity smoke (set SPACETIMEDB_LIVE=1 to enable)")
 struct MaincloudParitySmokeTest {
 

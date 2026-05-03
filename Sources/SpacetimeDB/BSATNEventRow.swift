@@ -19,6 +19,13 @@
 //       conformance, and
 //    2. expose a typed insert-only stream that filters & casts.
 //
+//  EVENT-FLAG-WAITING-ON-RELEASE: This protocol is fully unit-tested
+//  but not yet live-tested against maincloud — the `event` flag for
+//  the `#[spacetimedb::table(...)]` macro is on upstream `master` only
+//  (last checked: spacetimedb 1.12). See
+//  Tests/maincloud-fixtures/parity-module/README.md for the bring-up
+//  checklist when the flag ships in a released crate.
+//
 
 import Foundation
 import BSATN
