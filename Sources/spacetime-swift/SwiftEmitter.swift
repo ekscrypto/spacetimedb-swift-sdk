@@ -11,6 +11,14 @@
 import Foundation
 
 struct SwiftEmitter {
+    /// Version of the `spacetime-swift` CLI. Embedded into every
+    /// generated `Db.swift`; the SDK validates it against
+    /// `SDKVersion.minimumCompatibleCodegenVersion` at
+    /// `Db.attach(to:)` time and refuses to load codegen older than
+    /// that floor. Bump in lockstep with breaking codegen-format
+    /// changes.
+    static let codegenVersion = "2.1.0"
+
     let schema: SchemaDoc
 
     /// Indices in `typespace.types` that are also referenced by a table's
@@ -133,6 +141,11 @@ struct SwiftEmitter {
         src += "/// property is a live `Table<Row>` whose cache, callbacks,\n"
         src += "/// and PK lookups are wired to the underlying client.\n"
         src += "public struct Db: Sendable {\n"
+        src += "    /// Codegen version that emitted this file. The SDK\n"
+        src += "    /// validates it against `SDKVersion.minimumCompatibleCodegenVersion`\n"
+        src += "    /// at `attach(to:)` time and throws if the codegen is\n"
+        src += "    /// older than the SDK can consume.\n"
+        src += "    public static let codegenVersion: String = \"\(Self.codegenVersion)\"\n\n"
         src += "    public let client: SpacetimeDBClient\n"
         src += "    public let reducers: Reducers\n"
         for field in fields {
@@ -152,8 +165,12 @@ struct SwiftEmitter {
         src += "\n    /// Register every table row decoder on `client` and\n"
         src += "    /// instantiate the per-table caches. Awaits each\n"
         src += "    /// `Table.init` so the underlying row-event stream is\n"
-        src += "    /// registered before this returns.\n"
-        src += "    public static func attach(to client: SpacetimeDBClient) async -> Db {\n"
+        src += "    /// registered before this returns. Throws\n"
+        src += "    /// `SDKVersion.Error.incompatibleCodegen` if this file\n"
+        src += "    /// was emitted by a `spacetime-swift` CLI older than\n"
+        src += "    /// the SDK can support.\n"
+        src += "    public static func attach(to client: SpacetimeDBClient) async throws -> Db {\n"
+        src += "        try SDKVersion.ensureCompatible(codegenVersion: Db.codegenVersion)\n"
         for field in fields {
             src += "        await client.registerTableRowDecoder(\(field.typeName).self)\n"
         }

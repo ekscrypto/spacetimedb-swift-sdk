@@ -109,6 +109,24 @@ extension SpacetimeDBClient {
         }
     }
 
+    /// Phase 14: foreign-client transaction events. Fires once per
+    /// `TransactionUpdate` server message, which is sent for transactions
+    /// that affected this client's subscriptions but were initiated by
+    /// another client. (Transactions caused by THIS client's reducers
+    /// arrive on `reducerEvents` instead.)
+    public var transactionEvents: AsyncStream<TransactionEvent> {
+        AsyncStream { continuation in
+            let id = UUID()
+            self.transactionContinuations[id] = continuation
+            let weakSelf = WeakClient(self)
+            continuation.onTermination = { @Sendable [weakSelf] _ in
+                Task { [weakSelf] in
+                    await weakSelf.client?.unregisterTransactionContinuation(id: id)
+                }
+            }
+        }
+    }
+
     // MARK: Internal emission (called from the receive loop)
 
     internal func emit(connection event: ConnectionEvent) {
@@ -216,6 +234,14 @@ extension SpacetimeDBClient {
         if rowContinuations[tableName]?.isEmpty == true {
             rowContinuations.removeValue(forKey: tableName)
         }
+    }
+
+    internal func emit(transaction event: TransactionEvent) {
+        for cont in transactionContinuations.values { cont.yield(event) }
+    }
+
+    internal func unregisterTransactionContinuation(id: UUID) {
+        transactionContinuations.removeValue(forKey: id)
     }
 }
 

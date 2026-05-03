@@ -180,6 +180,8 @@ public actor SpacetimeDBClient {
     internal var subscriptionContinuations: [UUID: AsyncStream<SubscriptionLifecycleEvent>.Continuation] = [:]
     internal var tableContinuations: [String: [UUID: AsyncStream<TableEvent>.Continuation]] = [:]
     internal var rowContinuations: [String: [UUID: AsyncStream<RowEvent>.Continuation]] = [:]
+    // Phase 14: foreign-client transaction events.
+    internal var transactionContinuations: [UUID: AsyncStream<TransactionEvent>.Continuation] = [:]
 
     // Phase 4: pending-future registries for SubscriptionHandle.applied()/unsubscribe().
     internal var pendingAppliedContinuations: [UInt32: [CheckedContinuation<Void, Error>]] = [:]

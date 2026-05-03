@@ -67,6 +67,31 @@ public enum SubscriptionLifecycleEvent: Sendable, Equatable {
     case error(queryId: UInt32, requestId: UInt32?, message: String)
 }
 
+/// Foreign-client transaction event delivered on
+/// `SpacetimeDBClient.transactionEvents`. Fires once per
+/// `TransactionUpdate` server message — those carry diffs from
+/// transactions that affected this client's subscriptions but were
+/// initiated by a *different* client. The same diffs are also fanned
+/// out to `tableEvents(named:)` and `rowEvents(table:)`; subscribe
+/// to this stream when you specifically want to distinguish foreign
+/// transactions from your own (`reducerEvents`) reducer calls.
+///
+/// v2 carries no reducer metadata in `TransactionUpdate` — the timestamp
+/// here is locally observed when the message was decoded.
+public struct TransactionEvent: Sendable {
+    public let timestamp: Date
+    /// Number of affected query sets in the transaction (≥1).
+    public let querySetCount: Int
+    /// Names of the tables whose rows changed in this transaction.
+    public let affectedTables: [String]
+
+    public init(timestamp: Date, querySetCount: Int, affectedTables: [String]) {
+        self.timestamp = timestamp
+        self.querySetCount = querySetCount
+        self.affectedTables = affectedTables
+    }
+}
+
 /// Per-row event delivered on `SpacetimeDBClient.rowEvents(table:)`.
 /// When the table's row type conforms to `BSATNTableWithPrimaryKey`,
 /// delete+insert pairs sharing a PK within a single transaction are

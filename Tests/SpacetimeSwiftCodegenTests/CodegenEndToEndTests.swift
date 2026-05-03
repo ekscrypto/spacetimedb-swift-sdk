@@ -237,7 +237,7 @@ struct CodegenEndToEndTests {
         #expect(src.contains("public struct Db: Sendable"))
         #expect(src.contains("public let user: Table<UserRow>"))
         #expect(src.contains("public let message: Table<MessageRow>"))
-        #expect(src.contains("public static func attach(to client: SpacetimeDBClient) async -> Db"))
+        #expect(src.contains("public static func attach(to client: SpacetimeDBClient) async throws -> Db"))
         #expect(src.contains("await client.registerTableRowDecoder(UserRow.self)"))
         #expect(src.contains("await client.registerTableRowDecoder(MessageRow.self)"))
         #expect(src.contains("user: Table<UserRow>(client: client)"))
@@ -257,6 +257,13 @@ struct CodegenEndToEndTests {
         #expect(src.contains("try await client.callReducer(SendMessageReducer(text: text))"))
         #expect(src.contains("public func setName(nameArg: String) async throws -> ReducerSuccess"))
         #expect(src.contains("try await client.callReducer(SetNameReducer(nameArg: nameArg))"))
+    }
+
+    @Test func dbEmbedsCodegenVersionAndCallsEnsureCompatible() throws {
+        let doc = try Self.loadSchema()
+        let src = SwiftEmitter(schema: doc).emit()["Db.swift"] ?? ""
+        #expect(src.contains("public static let codegenVersion: String = \"\(SwiftEmitter.codegenVersion)\""))
+        #expect(src.contains("try SDKVersion.ensureCompatible(codegenVersion: Db.codegenVersion)"))
     }
 
     @Test func dbExposesClientReducersAndContext() throws {
