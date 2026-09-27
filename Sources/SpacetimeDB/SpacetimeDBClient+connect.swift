@@ -20,7 +20,7 @@ extension SpacetimeDBClient {
         delegate clientDelegate: SpacetimeDBClientDelegate? = nil,
         enableAutoReconnect: Bool = true
     ) throws {
-        guard webSocketTask == nil else {
+        guard wsConnection == nil else {
             throw Errors.alreadyConnected
         }
 
@@ -38,12 +38,7 @@ extension SpacetimeDBClient {
         // via the Compression framework on iOS 15+/macOS 12+ — see
         // CompressibleQueryUpdate.decompressGzip / decompressBrotli.
 
-        guard let socketDelegate = urlSession.delegate as? WebsocketDelegate else {
-            throw Errors.incompatibleUrlSessionDelegate
-        }
-        socketDelegate.dbClient = self
         self.clientDelegate = clientDelegate
-        self.socketDelegate = socketDelegate
 
         var urlString = "\(wsHost)/v1/database/\(dbName)/subscribe?compression=\(compression.serverString)"
         if confirmedReads {
@@ -52,21 +47,23 @@ extension SpacetimeDBClient {
         guard let url = URL(string: urlString) else {
             throw Errors.invalidServerAddress
         }
-        var request = URLRequest(
-            url: url,
-            cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
-            timeoutInterval: timeout
-        )
 
-        request.setValue(uniqueSocketKey, forHTTPHeaderField: "Sec-WebSocket-Key")
-        request.setValue("v2.bsatn.spacetimedb", forHTTPHeaderField: "Sec-WebSocket-Protocol")
+        var headers: [(name: String, value: String)] = []
         if let token {
-            request.setValue("Bearer \(token.rawValue)", forHTTPHeaderField: "Authorization")
+            headers.append((name: "Authorization", value: "Bearer \(token.rawValue)"))
         }
 
-        let socketTask = urlSession.webSocketTask(with: request)
-        webSocketTask = socketTask
-        socketTask.resume()
+        let connection = NWWebSocketConnection(
+            url: url,
+            headers: headers,
+            subprotocol: "v2.bsatn.spacetimedb"
+        )
+        connection.onEvent { [weak self] event in
+            guard let self else { return }
+            Task { await self.handleTransportEvent(event) }
+        }
+        wsConnection = connection
+        connection.open(timeout: timeout)
         receiveTask = Task(priority: .utility) {
             try await self.receiveMessage()
         }

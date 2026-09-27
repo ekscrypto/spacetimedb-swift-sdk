@@ -50,7 +50,7 @@ extension SpacetimeDBClient {
     /// Invoke a reducer with raw BSATN-encoded arguments.
     @discardableResult
     public func callReducer(name: String, encodedArguments: Data) async throws -> ReducerSuccess {
-        guard let webSocketTask else { throw Errors.disconnected }
+        guard let wsConnection else { throw Errors.disconnected }
         let requestId = nextRequestId
         let flags: CallReducerFlags = lightMode ? .noSuccessNotify : .default
         let request = CallReducerRequest(
@@ -67,7 +67,7 @@ extension SpacetimeDBClient {
         // immediately. Errors are still surfaced asynchronously through
         // the reducerEvents stream when the server reports them.
         if flags == .noSuccessNotify {
-            try await webSocketTask.send(.data(payload))
+            try await wsConnection.send(payload)
             return ReducerSuccess(
                 returnValue: Data(),
                 timestamp: Date(),
@@ -82,7 +82,7 @@ extension SpacetimeDBClient {
             )
             Task {
                 do {
-                    try await webSocketTask.send(.data(payload))
+                    try await wsConnection.send(payload)
                 } catch {
                     if self.pendingReducerCalls.removeValue(forKey: requestId) != nil {
                         continuation.resume(throwing: error)

@@ -11,7 +11,6 @@ import BSATN
 public actor SpacetimeDBClient {
 
     public enum Errors: Error {
-        case incompatibleUrlSessionDelegate
         case alreadyConnected
         case failedToCreateSocketTask
         case disconnected
@@ -26,14 +25,16 @@ public actor SpacetimeDBClient {
     /// Parameters:
     /// - host: URL to the server root address including port number.
     ///   Accepts http://, https://, ws://, or wss:// schemes
-    ///   (e.g. http://localhost:3000, https://maincloud.spacetimedb.com).
+    ///   (e.g.: http://localhost:3000, https://maincloud.spacetimedb.com).
     /// - dbName: Database name to which to connect. I.e.: "quickstart-chat"
-    /// - urlSession: URLSession to use, will use .shared session by default
+    /// - compression: compression format to request from the server
+    /// - confirmedReads: whether to request confirmed reads
+    /// - lightMode: whether reducer calls default to `noSuccessNotify`
+    /// - debugEnabled: whether to enable wire-level debug logging
     ///
     public init(
         host: String,
         db dbName: String,
-        urlSession: URLSession? = nil,
         compression: Compression = .brotli,
         confirmedReads: Bool = false,
         lightMode: Bool = false,
@@ -55,21 +56,14 @@ public actor SpacetimeDBClient {
         self.debugEnabled = debugEnabled
         // Set global debug configuration
         DebugConfiguration.shared.setEnabled(debugEnabled)
-        if let urlSession {
-            guard let delegate = urlSession.delegate as? WebsocketDelegate else {
-                throw Errors.incompatibleUrlSessionDelegate
-            }
-            self.urlSession = urlSession
-            self.socketDelegate = delegate
-        } else {
-            self.socketDelegate = WebsocketDelegate()
-            self.urlSession = URLSession(configuration: .ephemeral, delegate: socketDelegate, delegateQueue: nil)
-        }
+        // REST surface (identity endpoints) — plain URLSession, no delegate.
+        self.restSession = URLSession(configuration: .ephemeral)
     }
 
-    internal var webSocketTask: URLSessionWebSocketTask?
-    internal var socketDelegate: WebsocketDelegate?
-    internal let urlSession: URLSession
+    /// The live websocket transport (`NWWebSocketConnection`), present
+    /// between `connect()` and disconnection.
+    internal var wsConnection: NWWebSocketConnection?
+    internal let restSession: URLSession
     internal let compression: Compression
     /// When `true`, the WebSocket subscribe URL gets `with_confirmed_reads=true`,
     /// instructing the server to wait for durable confirmation before returning
@@ -145,11 +139,6 @@ public actor SpacetimeDBClient {
         return _nextQueryId
     }
     private var _nextQueryId: UInt32 = 0
-
-    internal var uniqueSocketKey: String {
-        let activeSocketKeyBytes = (0..<16).map { _ in UInt8.random(in: 0...255) }
-        return Data(activeSocketKeyBytes).base64EncodedString()
-    }
 
     // Table Row Decoders
     private var tableRowDecoders: [String: TableRowDecoder] = [:]

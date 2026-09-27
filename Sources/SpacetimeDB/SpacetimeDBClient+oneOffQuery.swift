@@ -19,16 +19,16 @@ extension SpacetimeDBClient {
     /// by table. Throws `OneOffQueryError.serverError` if the server
     /// rejects the query, or `.timeout` if no response arrives in time.
     public func oneOffQuery(_ query: String, timeout: TimeInterval = 10.0) async throws -> [SingleTableRows] {
-        guard let webSocketTask else { throw Errors.disconnected }
+        guard let wsConnection else { throw Errors.disconnected }
         let requestId = nextRequestId
         let request = OneOffQueryRequest(requestId: requestId, queryString: query)
         let payload = try request.encode()
 
         let message: OneOffQueryResultMessage = try await withCheckedThrowingContinuation { continuation in
             self.pendingOneOffQueries[requestId] = continuation
-            Task {
+            let send: Task<Void, Error> = Task {
                 do {
-                    try await webSocketTask.send(.data(payload))
+                    try await wsConnection.send(payload)
                     Task {
                         try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
                         self.timeoutOneOffQuery(requestId: requestId)
@@ -37,6 +37,7 @@ extension SpacetimeDBClient {
                     self.failOneOffQuery(requestId: requestId, error: error)
                 }
             }
+            _ = send
         }
 
         switch message.result {

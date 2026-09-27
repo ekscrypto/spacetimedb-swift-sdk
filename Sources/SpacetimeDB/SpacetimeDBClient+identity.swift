@@ -16,7 +16,7 @@ extension SpacetimeDBClient {
         var request = URLRequest(url: v1Url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await restSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200,
               let identityResponse = try? JSONDecoder().decode(IdentityResponse.self, from: data)

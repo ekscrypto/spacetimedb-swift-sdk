@@ -15,9 +15,9 @@ extension SpacetimeDBClient {
             self.stopAutoReconnect()
         }
 
-        if let task = webSocketTask {
-            task.cancel(with: .goingAway, reason: nil)
-            webSocketTask = nil
+        if let connection = wsConnection {
+            connection.close()
+            wsConnection = nil
         }
 
         _connected = false

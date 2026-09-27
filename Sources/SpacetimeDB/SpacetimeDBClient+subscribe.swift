@@ -15,13 +15,13 @@ extension SpacetimeDBClient {
     /// for tracking the resulting query_set_id (typically via the
     /// returned `SubscriptionHandle`).
     internal func sendSubscribe(queries: [String], queryId: UInt32) async throws {
-        guard let webSocketTask else { throw Errors.disconnected }
+        guard let wsConnection else { throw Errors.disconnected }
         let request = SubscribeRequest(
             requestId: nextRequestId,
             querySetId: QuerySetId(queryId),
             queryStrings: queries
         )
         let payload = try request.encode()
-        try await webSocketTask.send(.data(payload))
+        try await wsConnection.send(payload)
     }
 }

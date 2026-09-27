@@ -17,20 +17,13 @@ import BSATN
 
 extension SpacetimeDBClient {
     internal func receiveMessage() async throws {
-        guard let webSocketTask else { return }
+        guard let wsConnection else { return }
 
         while !Task.isCancelled {
-            let message = try await webSocketTask.receive()
-            switch message {
-            case .data(let data):
-                await processOrForwardMessage(data)
-            case .string(let string):
-                if let data = string.data(using: .utf8) {
-                    await processOrForwardMessage(data)
-                }
-            @unknown default:
-                break
-            }
+            // nil = the transport closed cleanly; a throw ends the loop and
+            // the transport's failed event drives disconnection handling.
+            guard let data = try await wsConnection.receive() else { break }
+            await processOrForwardMessage(data)
         }
     }
 

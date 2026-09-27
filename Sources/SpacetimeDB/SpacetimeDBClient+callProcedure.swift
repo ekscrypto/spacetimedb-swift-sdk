@@ -33,7 +33,7 @@ extension SpacetimeDBClient {
     /// caller; on `.internalError`, throws `ProcedureCallError`.
     @discardableResult
     public func callProcedure(name: String, arguments: Data = Data()) async throws -> Data {
-        guard let webSocketTask else { throw Errors.disconnected }
+        guard let wsConnection else { throw Errors.disconnected }
         let requestId = nextRequestId
         let request = CallProcedureRequest(
             procedure: name,
@@ -49,7 +49,7 @@ extension SpacetimeDBClient {
             )
             Task {
                 do {
-                    try await webSocketTask.send(.data(payload))
+                    try await wsConnection.send(payload)
                 } catch {
                     if self.pendingProcedureCalls.removeValue(forKey: requestId) != nil {
                         continuation.resume(throwing: error)
