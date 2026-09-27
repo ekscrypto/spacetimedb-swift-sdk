@@ -16,8 +16,13 @@ extension SpacetimeDBClient {
         switch event {
         case .connected:
             await websocketConnected()
-        case .closed, .failed:
-            await websocketDisconnected()
+        case .closed:
+            await websocketDisconnected(reason: nil)
+        case .failed(let reason):
+            // Carry the failure text (e.g. "server refused the upgrade:
+            // HTTP/1.1 401 …") onto `connectionEvents` — swallowing it made
+            // an auth rejection indistinguishable from any network loss.
+            await websocketDisconnected(reason: reason)
         }
     }
 
@@ -26,7 +31,7 @@ extension SpacetimeDBClient {
         await clientDelegate?.onConnect(client: self)
     }
 
-    internal func websocketDisconnected() async {
+    internal func websocketDisconnected(reason: String?) async {
         _connected = false
         receiveTask?.cancel()
         receiveTask = nil
@@ -48,8 +53,8 @@ extension SpacetimeDBClient {
         // and fails the same things itself, so a manual disconnect may see
         // this run a second time (both are idempotent; consumers treat the
         // first terminal event as the end).
-        self.emit(connection: .disconnected(reason: nil))
-        self.failAllSubscriptionFutures(reason: "connection lost")
+        self.emit(connection: .disconnected(reason: reason))
+        self.failAllSubscriptionFutures(reason: reason.map { "connection lost: \($0)" } ?? "connection lost")
 
         await clientDelegate?.onDisconnect(client: self)
 
